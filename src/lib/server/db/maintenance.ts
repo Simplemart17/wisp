@@ -30,7 +30,9 @@ export async function findSweepableShares(nowIso: string): Promise<
     .from("shares")
     .select("id, ciphertext_ref")
     .is("parent_share_id", null)
-    .or(`expires_at.lt.${nowIso},policy->>maxViews.eq.0`)
+    // views_remaining=0 matches only exhausted ANONYMOUS shares (identity
+    // shares track per-recipient counters and are reclaimed on expiry).
+    .or(`expires_at.lt.${nowIso},views_remaining.eq.0`)
     .limit(500);
   if (error) throw new Error(`sweep query failed: ${error.message}`);
   return (data ?? []).map((s) => ({

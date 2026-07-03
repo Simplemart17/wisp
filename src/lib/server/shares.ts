@@ -25,8 +25,9 @@ export function isExpired(share: ShareRecord): boolean {
   return isExpiredAt(share.expiresAt);
 }
 
+/** Anonymous shares track the live counter in viewsRemaining; null = unlimited. */
 export function isExhausted(share: ShareRecord): boolean {
-  return share.policy.maxViews !== null && share.policy.maxViews <= 0;
+  return share.viewsRemaining !== null && share.viewsRemaining <= 0;
 }
 
 /**

@@ -21,6 +21,8 @@ export interface ShareRecord {
   managementTokenHash: string;
   parentShareId: string | null;
   ownerUserId: string | null;
+  /** Live per-share view counter (anonymous shares); null = unlimited. */
+  viewsRemaining: number | null;
   createdAt: string;
   expiresAt: string | null;
 }
@@ -34,6 +36,7 @@ export interface ShareContent {
   encryptedMetadata: string;
   policy: SharePolicy;
   managementTokenHash: string;
+  viewsRemaining: number | null;
   expiresAt: string | null;
   ownerUserId: string | null;
 }
@@ -49,6 +52,7 @@ interface ShareRow {
   management_token_hash: string;
   parent_share_id: string | null;
   owner_user_id: string | null;
+  views_remaining: number | null;
   created_at: string;
   expires_at: string | null;
 }
@@ -65,6 +69,7 @@ function toShareRecord(row: ShareRow): ShareRecord {
     managementTokenHash: row.management_token_hash,
     parentShareId: row.parent_share_id,
     ownerUserId: row.owner_user_id,
+    viewsRemaining: row.views_remaining,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
   };
@@ -80,6 +85,7 @@ function contentColumns(content: ShareContent) {
     policy: content.policy,
     management_token_hash: content.managementTokenHash,
     owner_user_id: content.ownerUserId,
+    views_remaining: content.viewsRemaining,
     expires_at: content.expiresAt,
   };
 }

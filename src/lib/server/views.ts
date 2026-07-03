@@ -15,7 +15,7 @@ export function toManagedShare(share: ShareRecord): ManagedShareDto {
     expiresAt: share.expiresAt,
     expired: isExpired(share),
     exhausted: isExhausted(share),
-    remainingViews: share.policy.maxViews,
+    remainingViews: share.viewsRemaining,
     requiresPassword: share.policy.password,
     requiresIdentity: share.policy.requireIdentity,
     requiresSignature: share.policy.requireSignature,
