@@ -1,6 +1,10 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import Link from "next/link";
+
+import { AuthCorner } from "@/components/auth-corner";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -18,8 +22,14 @@ export const metadata: Metadata = {
     "Share sensitive documents and messages, end-to-end encrypted in your browser. The server only ever stores ciphertext.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Sender accounts are optional (SPEC §5b): without Clerk keys the app runs
+  // management-token-only and no Clerk code is rendered at all.
+  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  // Under strict-dynamic CSP, Clerk's hot-loaded script must carry the nonce.
+  const nonce = clerkEnabled ? ((await headers()).get("x-nonce") ?? undefined) : undefined;
+
+  const page = (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} min-h-dvh antialiased`}
@@ -29,9 +39,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/" className="font-display text-2xl italic tracking-tight">
               Wisp
             </Link>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-faded">
-              sealed · expiring · zero-knowledge
-            </p>
+            <span className="flex items-center gap-4">
+              <p className="hidden font-mono text-[11px] uppercase tracking-widest text-faded sm:block">
+                sealed · expiring · zero-knowledge
+              </p>
+              {clerkEnabled ? <AuthCorner /> : null}
+            </span>
           </header>
           <main className="flex-1 py-10">{children}</main>
           <footer className="border-t border-mist py-5">
@@ -45,4 +58,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </body>
     </html>
   );
+
+  return clerkEnabled ? <ClerkProvider nonce={nonce}>{page}</ClerkProvider> : page;
 }
