@@ -11,7 +11,7 @@ export function AuthCorner() {
         <SignInButton mode="modal">
           <button
             type="button"
-            className="font-mono text-[11px] uppercase tracking-widest text-faded hover:text-verdigris"
+            className="font-mono text-[11px] tracking-tight text-faded transition-colors hover:text-ink"
           >
             sign in
           </button>
@@ -20,7 +20,7 @@ export function AuthCorner() {
       <Show when="signed-in">
         <Link
           href="/dashboard"
-          className="font-mono text-[11px] uppercase tracking-widest text-faded hover:text-verdigris"
+          className="font-mono text-[11px] tracking-tight text-faded transition-colors hover:text-ink"
         >
           my shares
         </Link>
