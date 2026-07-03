@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+import { requireSupabase } from "./env";
+
 /** Private bucket holding ciphertext blobs, released only via signed URLs. */
 export const CIPHERTEXT_BUCKET = "wisp";
 
@@ -24,11 +26,7 @@ let cached: WispClient | null = null;
  */
 export function wispDb(): WispClient {
   if (cached) return cached;
-  const url = process.env.SUPABASE_URL;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !secretKey) {
-    throw new Error("SUPABASE_URL and SUPABASE_SECRET_KEY must be set");
-  }
+  const { url, secretKey } = requireSupabase();
   cached = createWispClient(url, secretKey);
   return cached;
 }

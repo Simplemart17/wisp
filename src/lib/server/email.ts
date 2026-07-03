@@ -4,6 +4,8 @@
  * server console instead of sent, so every flow stays exercisable.
  */
 
+import { env } from "./env";
+
 export interface OutgoingEmail {
   to: string;
   subject: string;
@@ -17,8 +19,8 @@ function redactFragments(text: string): string {
 }
 
 export async function sendEmail(email: OutgoingEmail): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.WISP_EMAIL_FROM ?? "Wisp <onboarding@resend.dev>";
+  const apiKey = env.resendApiKey;
+  const from = env.emailFrom;
 
   if (!apiKey) {
     console.log(

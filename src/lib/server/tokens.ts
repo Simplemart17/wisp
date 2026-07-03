@@ -4,6 +4,8 @@
  */
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 
+import { env } from "./env";
+
 function base64Url(buf: Buffer): string {
   return buf.toString("base64url");
 }
@@ -46,7 +48,7 @@ let warnedNoIpSalt = false;
 
 /** Salted, truncated IP hash for the audit log — attributable, not reversible. */
 export function hashIp(ip: string): string {
-  let salt = process.env.WISP_IP_SALT;
+  let salt = env.ipSalt;
   if (!salt) {
     if (!warnedNoIpSalt) {
       console.warn(

@@ -1,4 +1,6 @@
 /** Small helpers shared by all Route Handlers. */
+import type { ErrorKind } from "@/lib/shared/errors";
+import { env } from "./env";
 import { rateLimit } from "./ratelimit";
 
 export class ApiError extends Error {
@@ -6,7 +8,7 @@ export class ApiError extends Error {
     public readonly status: number,
     message: string,
     /** Machine-readable kind surfaced to the client UI. */
-    public readonly kind?: string,
+    public readonly kind?: ErrorKind,
   ) {
     super(message);
     this.name = "ApiError";
@@ -52,9 +54,9 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
  * self-hosters with no proxy set 0 to ignore XFF entirely.
  */
 export function clientIp(req: Request): string {
-  const depth = Number.parseInt(process.env.WISP_TRUSTED_PROXY_DEPTH ?? "1", 10);
+  const depth = env.trustedProxyDepth;
   const xff = req.headers.get("x-forwarded-for");
-  if (xff && Number.isInteger(depth) && depth >= 1) {
+  if (xff && depth >= 1) {
     const hops = xff
       .split(",")
       .map((h) => h.trim())
