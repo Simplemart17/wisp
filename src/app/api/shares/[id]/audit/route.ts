@@ -1,6 +1,6 @@
 import { ApiError, clientIp, errorResponse, jsonResponse } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/ratelimit";
-import { getShare, isExhausted, isExpired, requireManagementToken } from "@/lib/server/shares";
+import { getShare, isExhausted, isExpired, requireManagementAccess } from "@/lib/server/shares";
 import { wispDb } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function GET(
     if (!share || share.parent_share_id !== null) {
       return jsonResponse({ error: "Not found", kind: "gone" }, 404);
     }
-    requireManagementToken(req, share);
+    await requireManagementAccess(req, share);
 
     const db = wispDb();
     const { data: entries, error } = await db

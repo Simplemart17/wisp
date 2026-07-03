@@ -1,5 +1,6 @@
 import { ApiError } from "./http";
 import type { SharePolicy } from "./policy";
+import { senderUserId } from "./sender-auth";
 import { wispDb } from "./supabase";
 import { tokenMatchesHash } from "./tokens";
 
@@ -14,6 +15,7 @@ export interface ShareRow {
   policy: SharePolicy;
   management_token_hash: string;
   parent_share_id: string | null;
+  owner_user_id: string | null;
   created_at: string;
   expires_at: string | null;
 }
@@ -35,12 +37,19 @@ export function isExhausted(share: ShareRow): boolean {
   return share.policy.maxViews !== null && share.policy.maxViews <= 0;
 }
 
-/** Gate for /revoke and /audit: constant-time management-token check. */
-export function requireManagementToken(req: Request, share: ShareRow): void {
+/**
+ * Gate for /revoke, /audit and /send-links (SPEC §8): EITHER the management
+ * token (constant-time hash check) OR a Clerk session whose user owns the
+ * share. Anonymous shares are token-only by construction.
+ */
+export async function requireManagementAccess(req: Request, share: ShareRow): Promise<void> {
   const presented = req.headers.get("x-management-token");
-  if (!presented || !tokenMatchesHash(presented, share.management_token_hash)) {
-    throw new ApiError(403, "Invalid management token");
-  }
+  if (presented && tokenMatchesHash(presented, share.management_token_hash)) return;
+
+  const userId = await senderUserId();
+  if (userId !== null && share.owner_user_id === userId) return;
+
+  throw new ApiError(403, "Invalid management token");
 }
 
 export interface RecipientRow {

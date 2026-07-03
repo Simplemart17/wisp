@@ -1,6 +1,7 @@
 import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { parseCreateShare } from "@/lib/server/policy";
 import { rateLimit } from "@/lib/server/ratelimit";
+import { senderUserId } from "@/lib/server/sender-auth";
 import { bytesToPgHex, wispDb } from "@/lib/server/supabase";
 import { emailHint } from "@/lib/server/email";
 import {
@@ -28,8 +29,11 @@ export async function POST(req: Request): Promise<Response> {
     const input = parseCreateShare(await readJsonBody(req));
     const id = generateShareId();
     const managementToken = generateManagementToken();
+    // Clerk-signed-in senders get share history (SPEC §5b); null = anonymous.
+    const ownerUserId = await senderUserId();
 
     const baseRow = {
+      owner_user_id: ownerUserId,
       ciphertext_ref: input.ciphertextRef,
       wrapped_cek: input.wrappedCek === null ? null : bytesToPgHex(input.wrappedCek),
       kdf_salt: input.kdfSalt === null ? null : bytesToPgHex(input.kdfSalt),

@@ -1,7 +1,7 @@
 import { sendEmail, isValidEmail, normalizeEmail } from "@/lib/server/email";
 import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/ratelimit";
-import { getShare, requireManagementToken } from "@/lib/server/shares";
+import { getShare, requireManagementAccess } from "@/lib/server/shares";
 import { wispDb } from "@/lib/server/supabase";
 import { sha256Base64Url } from "@/lib/server/tokens";
 
@@ -30,7 +30,7 @@ export async function POST(
     if (!share || share.parent_share_id !== null) {
       return jsonResponse({ error: "Not found", kind: "gone" }, 404);
     }
-    requireManagementToken(req, share);
+    await requireManagementAccess(req, share);
     if (!share.policy.requireIdentity) {
       throw new ApiError(400, "This share has no recipient list");
     }

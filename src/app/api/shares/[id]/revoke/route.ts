@@ -1,6 +1,6 @@
 import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/ratelimit";
-import { getShare, requireManagementToken } from "@/lib/server/shares";
+import { getShare, requireManagementAccess } from "@/lib/server/shares";
 import { CIPHERTEXT_BUCKET, wispDb } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function POST(
       // Child ids are not directly manageable — the parent's manage link is.
       return jsonResponse({ error: "Not found", kind: "gone" }, 404);
     }
-    requireManagementToken(req, share);
+    await requireManagementAccess(req, share);
 
     const body = await readJsonBody(req).catch(() => ({}) as Record<string, unknown>);
     const db = wispDb();
