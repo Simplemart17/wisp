@@ -1,7 +1,9 @@
 /**
- * Share policy validation (SPEC §4 — Phase 1 subset: expiry, view limit,
- * password). All fields arrive from the client, so everything is checked.
+ * Share policy validation (SPEC §4). All fields arrive from the client, so
+ * everything is checked. `recipients` is returned separately — it drives row
+ * creation (per-recipient links), it is never stored inside the policy JSON.
  */
+import { isValidEmail, normalizeEmail } from "./email";
 import { ApiError } from "./http";
 import { BLOB_PATH_RE } from "./tokens";
 import { MAX_ENCRYPTED_METADATA_BYTES } from "./supabase";
@@ -14,6 +16,7 @@ export const EXPIRY_OPTIONS: Record<string, number> = {
 };
 
 const MAX_VIEWS_CAP = 100;
+export const MAX_RECIPIENTS = 20;
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
 const WRAPPED_CEK_BYTES = 60; // 12 nonce + 32 key + 16 tag
 const KDF_SALT_BYTES = 16;
@@ -22,6 +25,10 @@ export interface SharePolicy {
   expiresIn: keyof typeof EXPIRY_OPTIONS;
   maxViews: number | null;
   password: boolean;
+  requireIdentity: boolean; // server-enforced email OTP gate
+  viewOnly: boolean; // client-honored: no download affordance
+  watermark: boolean; // client-honored: burned into the rendered canvas
+  notifyEmail: string | null; // notify-on-open target (sender-provided)
 }
 
 export interface ValidatedCreateShare {
@@ -31,6 +38,8 @@ export interface ValidatedCreateShare {
   kdfSalt: string | null;
   kdfParams: Record<string, unknown> | null;
   policy: SharePolicy;
+  /** Normalized, deduplicated recipient emails (empty unless requireIdentity). */
+  recipients: string[];
   expiresAt: Date;
 }
 
@@ -80,6 +89,24 @@ function validateKdfParams(value: unknown): Record<string, unknown> {
   };
 }
 
+function parseRecipients(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ApiError(400, "requireIdentity needs at least one recipient email");
+  }
+  if (value.length > MAX_RECIPIENTS) {
+    throw new ApiError(400, `At most ${MAX_RECIPIENTS} recipients per share`);
+  }
+  const normalized = new Set<string>();
+  for (const entry of value) {
+    const trimmed = typeof entry === "string" ? entry.trim() : entry;
+    if (!isValidEmail(trimmed)) {
+      throw new ApiError(400, "recipients must be valid email addresses");
+    }
+    normalized.add(normalizeEmail(trimmed));
+  }
+  return [...normalized];
+}
+
 export function parseCreateShare(body: Record<string, unknown>): ValidatedCreateShare {
   const ciphertextRef = body.ciphertextRef;
   if (typeof ciphertextRef !== "string" || !BLOB_PATH_RE.test(ciphertextRef)) {
@@ -107,17 +134,32 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
   if (typeof rawPolicy !== "object" || rawPolicy === null) {
     throw new ApiError(400, "policy is required");
   }
-  const { expiresIn, maxViews } = rawPolicy as Record<string, unknown>;
-  if (typeof expiresIn !== "string" || !(expiresIn in EXPIRY_OPTIONS)) {
-    throw new ApiError(400, `policy.expiresIn must be one of ${Object.keys(EXPIRY_OPTIONS).join(", ")}`);
+  const p = rawPolicy as Record<string, unknown>;
+
+  if (typeof p.expiresIn !== "string" || !(p.expiresIn in EXPIRY_OPTIONS)) {
+    throw new ApiError(
+      400,
+      `policy.expiresIn must be one of ${Object.keys(EXPIRY_OPTIONS).join(", ")}`,
+    );
   }
   if (
-    maxViews !== null &&
-    maxViews !== undefined &&
-    (!Number.isInteger(maxViews) || (maxViews as number) < 1 || (maxViews as number) > MAX_VIEWS_CAP)
+    p.maxViews !== null &&
+    p.maxViews !== undefined &&
+    (!Number.isInteger(p.maxViews) || (p.maxViews as number) < 1 || (p.maxViews as number) > MAX_VIEWS_CAP)
   ) {
     throw new ApiError(400, `policy.maxViews must be null or an integer 1..${MAX_VIEWS_CAP}`);
   }
+  for (const flag of ["requireIdentity", "viewOnly", "watermark"] as const) {
+    if (p[flag] !== undefined && typeof p[flag] !== "boolean") {
+      throw new ApiError(400, `policy.${flag} must be a boolean`);
+    }
+  }
+  if (p.notifyEmail !== undefined && p.notifyEmail !== null && !isValidEmail(p.notifyEmail)) {
+    throw new ApiError(400, "policy.notifyEmail must be a valid email address");
+  }
+
+  const requireIdentity = p.requireIdentity === true;
+  const recipients = requireIdentity ? parseRecipients(body.recipients) : [];
 
   return {
     ciphertextRef,
@@ -126,10 +168,15 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
     kdfSalt,
     kdfParams,
     policy: {
-      expiresIn: expiresIn as keyof typeof EXPIRY_OPTIONS,
-      maxViews: (maxViews as number | undefined) ?? null,
+      expiresIn: p.expiresIn as keyof typeof EXPIRY_OPTIONS,
+      maxViews: (p.maxViews as number | undefined) ?? null,
       password: wrappedCek !== null,
+      requireIdentity,
+      viewOnly: p.viewOnly === true,
+      watermark: p.watermark === true,
+      notifyEmail: (p.notifyEmail as string | undefined) ? normalizeEmail(p.notifyEmail as string) : null,
     },
-    expiresAt: new Date(Date.now() + EXPIRY_OPTIONS[expiresIn] * 1000),
+    recipients,
+    expiresAt: new Date(Date.now() + EXPIRY_OPTIONS[p.expiresIn] * 1000),
   };
 }
