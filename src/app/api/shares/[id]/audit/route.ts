@@ -1,14 +1,12 @@
+import { listAccessLog, listSignatureTimes } from "@/lib/server/db/access";
+import { listRecipientStatus } from "@/lib/server/db/shares";
 import { enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
-import { getManageableParent, isExhausted, isExpired, requireManagementAccess } from "@/lib/server/shares";
-import { wispDb } from "@/lib/server/supabase";
+import { getManageableParent, requireManagementAccess } from "@/lib/server/shares";
+import { toAuditReport } from "@/lib/server/views";
 
 export const runtime = "nodejs";
 
-/**
- * Management-token-gated audit trail + share status for /manage (SPEC §8).
- * For identity shares, includes the per-recipient links with masked email
- * hints, and each log entry carries the recipient it belongs to.
- */
+/** Management-gated audit trail + share status for /manage (SPEC §8). */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -20,58 +18,13 @@ export async function GET(
     const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
 
-    const db = wispDb();
-    const { data: entries, error } = await db
-      .from("access_log")
-      .select("ts, ip_hash, user_agent, action, result, recipients(email_hint)")
-      .eq("share_id", id)
-      .order("ts", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(`access_log read failed: ${error.message}`);
+    const entries = await listAccessLog(id);
+    const recipients = share.policy.requireIdentity ? await listRecipientStatus(id) : [];
+    const signedAt = share.policy.requireSignature
+      ? await listSignatureTimes(id)
+      : new Map<string, string>();
 
-    let recipients: unknown[] = [];
-    if (share.policy.requireIdentity) {
-      const { data, error: recipientsError } = await db
-        .from("recipients")
-        .select("id, link_id, email_hint, views_remaining, verified_at, revoked")
-        .eq("share_id", id)
-        .order("email_hint");
-      if (recipientsError) throw new Error(`recipients read failed: ${recipientsError.message}`);
-
-      let signedAtByRecipient = new Map<string, string>();
-      if (share.policy.requireSignature) {
-        const { data: sigs, error: sigError } = await db
-          .from("signatures")
-          .select("recipient_id, created_at")
-          .eq("share_id", id);
-        if (sigError) throw new Error(`signatures read failed: ${sigError.message}`);
-        signedAtByRecipient = new Map(
-          (sigs ?? []).map((s) => [s.recipient_id as string, s.created_at as string]),
-        );
-      }
-      recipients = (data ?? []).map(({ id: recipientId, ...rest }) => ({
-        ...rest,
-        signedAt: signedAtByRecipient.get(recipientId as string) ?? null,
-      }));
-    }
-
-    return jsonResponse({
-      share: {
-        id: share.id,
-        createdAt: share.created_at,
-        expiresAt: share.expires_at,
-        expired: isExpired(share),
-        exhausted: isExhausted(share),
-        remainingViews: share.policy.maxViews,
-        requiresPassword: share.policy.password,
-        requiresIdentity: share.policy.requireIdentity,
-        requiresSignature: share.policy.requireSignature,
-        viewOnly: share.policy.viewOnly,
-        watermark: share.policy.watermark,
-      },
-      recipients,
-      entries: entries ?? [],
-    });
+    return jsonResponse(toAuditReport(share, recipients, entries, signedAt));
   } catch (error) {
     return errorResponse(error);
   }

@@ -1,7 +1,8 @@
+import { listOwnedShares } from "@/lib/server/db/shares";
 import { errorResponse, jsonResponse } from "@/lib/server/http";
 import { senderUserId } from "@/lib/server/sender-auth";
 import { isExpiredAt } from "@/lib/server/shares";
-import { wispDb } from "@/lib/server/supabase";
+import type { MyShareDto } from "@/lib/shared/api";
 
 export const runtime = "nodejs";
 
@@ -14,24 +15,20 @@ export async function GET(): Promise<Response> {
     const userId = await senderUserId();
     if (!userId) return jsonResponse({ error: "Sign in required", kind: "unauthorized" }, 401);
 
-    const { data, error } = await wispDb()
-      .from("shares")
-      .select("id, created_at, expires_at, policy")
-      .eq("owner_user_id", userId)
-      .is("parent_share_id", null)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (error) throw new Error(`my shares read failed: ${error.message}`);
-
-    return jsonResponse({
-      shares: (data ?? []).map((row) => ({
-        id: row.id as string,
-        createdAt: row.created_at as string,
-        expiresAt: row.expires_at as string | null,
-        expired: isExpiredAt(row.expires_at as string | null),
-        policy: row.policy,
-      })),
-    });
+    const shares: MyShareDto[] = (await listOwnedShares(userId)).map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      expired: isExpiredAt(s.expiresAt),
+      policy: {
+        maxViews: s.policy.maxViews,
+        password: s.policy.password,
+        requireIdentity: s.policy.requireIdentity,
+        viewOnly: s.policy.viewOnly,
+        watermark: s.policy.watermark,
+      },
+    }));
+    return jsonResponse({ shares });
   } catch (error) {
     return errorResponse(error);
   }

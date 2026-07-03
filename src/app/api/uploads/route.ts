@@ -1,5 +1,6 @@
+import { createSignedUploadUrl } from "@/lib/server/db/storage";
 import { ApiError, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { CIPHERTEXT_BUCKET, MAX_CIPHERTEXT_BYTES, wispDb } from "@/lib/server/supabase";
+import { MAX_CIPHERTEXT_BYTES } from "@/lib/server/supabase";
 import { generateBlobPath } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
@@ -20,14 +21,8 @@ export async function POST(req: Request): Promise<Response> {
       throw new ApiError(400, `size must be 1..${MAX_CIPHERTEXT_BYTES} bytes`);
     }
 
-    const path = generateBlobPath();
-    const { data, error } = await wispDb()
-      .storage.from(CIPHERTEXT_BUCKET)
-      .createSignedUploadUrl(path);
-    if (error || !data) {
-      throw new Error(`createSignedUploadUrl failed: ${error?.message}`);
-    }
-    return jsonResponse({ path: data.path, url: data.signedUrl });
+    const { path, url } = await createSignedUploadUrl(generateBlobPath());
+    return jsonResponse({ path, url });
   } catch (error) {
     return errorResponse(error);
   }

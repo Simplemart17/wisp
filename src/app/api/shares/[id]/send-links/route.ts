@@ -1,7 +1,7 @@
-import { sendEmail, isValidEmail, normalizeEmail } from "@/lib/server/email";
+import { listRecipientLinks } from "@/lib/server/db/shares";
+import { isValidEmail, normalizeEmail, sendEmail } from "@/lib/server/email";
 import { ApiError, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { getManageableParent, requireManagementAccess } from "@/lib/server/shares";
-import { wispDb } from "@/lib/server/supabase";
 import { sha256Base64Url } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
@@ -34,14 +34,8 @@ export async function POST(
       throw new ApiError(400, "links must be a non-empty array");
     }
 
-    const { data: recipients, error } = await wispDb()
-      .from("recipients")
-      .select("link_id, email_hash, revoked")
-      .eq("share_id", id);
-    if (error) throw new Error(`recipients read failed: ${error.message}`);
-    const byHash = new Map(
-      (recipients ?? []).filter((r) => !r.revoked).map((r) => [r.email_hash as string, r.link_id as string]),
-    );
+    const byHash = await listRecipientLinks(id);
+    const origin = new URL(req.url).origin;
 
     let sent = 0;
     for (const entry of body.links as Array<Record<string, unknown>>) {
@@ -49,7 +43,7 @@ export async function POST(
       const email = normalizeEmail(entry.email);
       const linkId = byHash.get(sha256Base64Url(email));
       // The URL must be this recipient's own link — nothing else gets forwarded.
-      if (!linkId || !entry.url.startsWith(`${new URL(req.url).origin}/s/${linkId}#`)) continue;
+      if (!linkId || !entry.url.startsWith(`${origin}/s/${linkId}#`)) continue;
 
       await sendEmail({
         to: email,
