@@ -16,6 +16,8 @@ export { WispCryptoError, type WispCryptoErrorCode } from "./errors";
 export {
   KEY_LENGTH,
   KDF_SALT_LENGTH,
+  GCM_NONCE_LENGTH,
+  GCM_TAG_LENGTH,
   DEFAULT_KDF_PARAMS,
   type KdfParams,
   type ShareSecrets,
@@ -25,6 +27,7 @@ export {
 } from "./keys";
 export {
   CONTENT_FORMAT_VERSION,
+  CONTENT_HEADER_LENGTH,
   DEFAULT_CHUNK_SIZE,
   MAX_CHUNK_SIZE,
   ChunkEncryptor,

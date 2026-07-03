@@ -21,7 +21,9 @@ export const CONTENT_FORMAT_VERSION = 1;
 export const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 export const MAX_CHUNK_SIZE = 64 * 1024 * 1024; // refuse hostile headers beyond this
 const NONCE_PREFIX_LENGTH = 7;
-const HEADER_LENGTH = 12;
+/** version(1) + noncePrefix(7) + chunkSize(u32) = 12 bytes. */
+export const CONTENT_HEADER_LENGTH = 12;
+const HEADER_LENGTH = CONTENT_HEADER_LENGTH;
 const MAX_COUNTER = 0xffffffff;
 
 function buildHeader(noncePrefix: Uint8Array, chunkSize: number): Uint8Array {

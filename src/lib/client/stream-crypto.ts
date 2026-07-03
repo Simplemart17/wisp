@@ -7,7 +7,9 @@
 import {
   ChunkDecryptor,
   ChunkEncryptor,
+  CONTENT_HEADER_LENGTH as HEADER_LENGTH,
   DEFAULT_CHUNK_SIZE,
+  GCM_TAG_LENGTH,
   WispCryptoError,
   fromBase64Url,
   toBase64Url,
@@ -18,9 +20,6 @@ import {
   decryptMetadata,
   encryptMetadata,
 } from "@/lib/crypto";
-
-const GCM_TAG_LENGTH = 16;
-const HEADER_LENGTH = 12;
 
 async function* blobChunks(source: Blob, chunkSize: number): AsyncGenerator<Uint8Array> {
   const reader = source.stream().getReader();
