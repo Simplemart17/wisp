@@ -5,12 +5,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type AccessedShare,
   ShareApiError,
+  type SigningState,
   type WatermarkPayload,
   accessShare,
   decryptAccessedShare,
   fetchShareStatus,
   requestOtp,
 } from "@/lib/client/shares";
+import { SigningPanel } from "./signing-panel";
 import { WispCryptoError, type ShareMetadata } from "@/lib/crypto";
 import {
   applyVisibleWatermark,
@@ -41,7 +43,10 @@ type Phase =
       name: "open";
       blob: Blob;
       metadata: ShareMetadata;
+      cek: Uint8Array;
       remainingViews: number | null;
+      signing: SigningState | null;
+      signerEmail: string | null;
       viewOnly: boolean;
       watermark: WatermarkPayload | null;
     }
@@ -122,6 +127,8 @@ export function ShareViewer({ id }: { id: string }) {
         name: "open",
         ...opened,
         remainingViews: accessed.remainingViews,
+        signing: accessed.signing,
+        signerEmail: gate.requiresIdentity ? email : null,
         viewOnly: accessed.viewOnly,
         watermark: accessed.watermark,
       });
@@ -292,14 +299,27 @@ export function ShareViewer({ id }: { id: string }) {
   }
 
   return (
-    <OpenedView
-      blob={phase.blob}
-      metadata={phase.metadata}
-      remainingViews={phase.remainingViews}
-      viewOnly={phase.viewOnly}
-      watermark={phase.watermark}
-      shareId={id}
-    />
+    <>
+      <OpenedView
+        blob={phase.blob}
+        metadata={phase.metadata}
+        remainingViews={phase.remainingViews}
+        viewOnly={phase.viewOnly}
+        watermark={phase.watermark}
+        shareId={id}
+      />
+      {phase.signing?.required ? (
+        <div className="mt-6">
+          <SigningPanel
+            cek={phase.cek}
+            blob={phase.blob}
+            linkId={id}
+            signerEmail={phase.signerEmail}
+            signing={phase.signing}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 

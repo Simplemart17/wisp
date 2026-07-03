@@ -143,6 +143,7 @@ export function ManageShare({ id }: { id: string }) {
                   <th className="px-3 py-2 font-normal">recipient</th>
                   <th className="px-3 py-2 font-normal">views left</th>
                   <th className="px-3 py-2 font-normal">verified</th>
+                  {s.requiresSignature ? <th className="px-3 py-2 font-normal">signed</th> : null}
                   <th className="px-3 py-2 font-normal" />
                 </tr>
               </thead>
@@ -162,6 +163,17 @@ export function ManageShare({ id }: { id: string }) {
                     <td className="px-3 py-2 text-faded">
                       {r.verified_at ? new Date(r.verified_at).toLocaleString() : "—"}
                     </td>
+                    {s.requiresSignature ? (
+                      <td className="px-3 py-2">
+                        {r.signedAt ? (
+                          <span className="text-verdigris">
+                            ✓ {new Date(r.signedAt).toLocaleDateString()}
+                          </span>
+                        ) : (
+                          <span className="text-faded">pending</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2 text-right">
                       {!r.revoked ? (
                         <button

@@ -45,6 +45,7 @@ interface PolicyState {
   expiresIn: string;
   maxViews: string;
   requireIdentity: boolean;
+  requireSignature: boolean;
   viewOnly: boolean;
   watermark: boolean;
   notify: boolean;
@@ -54,19 +55,19 @@ const PRESETS: Array<{ name: string; hint: string; state: PolicyState; wantsPass
   {
     name: "Maximum privacy",
     hint: "view-only · watermark · identity · one-time · 24h · password",
-    state: { expiresIn: "24h", maxViews: "1", requireIdentity: true, viewOnly: true, watermark: true, notify: false },
+    state: { expiresIn: "24h", maxViews: "1", requireIdentity: true, requireSignature: false, viewOnly: true, watermark: true, notify: false },
     wantsPassword: true,
   },
   {
     name: "Standard",
     hint: "identity · 7 days · 3 views · notify on open",
-    state: { expiresIn: "7d", maxViews: "3", requireIdentity: true, viewOnly: false, watermark: false, notify: true },
+    state: { expiresIn: "7d", maxViews: "3", requireIdentity: true, requireSignature: false, viewOnly: false, watermark: false, notify: true },
     wantsPassword: false,
   },
   {
     name: "Quick share",
     hint: "link only · 7 days · unlimited",
-    state: { expiresIn: "7d", maxViews: "", requireIdentity: false, viewOnly: false, watermark: false, notify: false },
+    state: { expiresIn: "7d", maxViews: "", requireIdentity: false, requireSignature: false, viewOnly: false, watermark: false, notify: false },
     wantsPassword: false,
   },
 ];
@@ -154,6 +155,7 @@ export function CreateShare() {
         expiresIn: policy.expiresIn,
         maxViews: policy.maxViews === "" ? null : Number(policy.maxViews),
         requireIdentity: policy.requireIdentity,
+        requireSignature: policy.requireSignature,
         recipients,
         viewOnly: policy.viewOnly && (mode === "message" || isRenderable(type)),
         watermark: policy.watermark,
@@ -168,6 +170,7 @@ export function CreateShare() {
           : `${policy.maxViews} view${policy.maxViews === "1" ? "" : "s"}${policy.requireIdentity ? " per recipient" : ""}`,
         password ? "password" : null,
         policy.requireIdentity ? `${recipients.length} verified recipient${recipients.length === 1 ? "" : "s"}` : null,
+        policy.requireSignature ? "signature requested" : null,
         policy.viewOnly ? "view-only" : null,
         policy.watermark ? "watermarked" : null,
       ]
@@ -408,6 +411,38 @@ export function CreateShare() {
                 </label>
               </div>
             ) : null}
+
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={policy.requireSignature}
+                onChange={(e) => {
+                  // A signature needs a verified signer — auto-enable identity.
+                  setPolicy((p) => ({
+                    ...p,
+                    requireSignature: e.target.checked,
+                    requireIdentity: e.target.checked ? true : p.requireIdentity,
+                  }));
+                  setActivePreset(null);
+                }}
+                className="mt-1 accent-verdigris"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm">
+                  Request signature <TierChip tier="encrypted" />
+                </span>
+                <span className="block text-xs leading-relaxed text-faded">
+                  Each verified recipient can sign the document in their browser: a cryptographic
+                  signature over the exact content, sealed so even the server can&apos;t read it.
+                  Anyone who can open the share can verify it.
+                  {policy.requireSignature && !policy.requireIdentity
+                    ? ""
+                    : policy.requireSignature
+                      ? " Requires identity (enabled)."
+                      : ""}
+                </span>
+              </span>
+            </label>
 
             <label className="flex items-start gap-3">
               <input
