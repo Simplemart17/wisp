@@ -86,6 +86,8 @@ Point it at any Supabase project — hosted or
 | `WISP_EMAIL_FROM` | no | From address for outgoing mail |
 | `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log |
 | `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` (expiry cleanup via pg_cron) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | no | Enables optional sender accounts + "My shares" dashboard |
+| `CLERK_SECRET_KEY` | no | Server side of the Clerk integration |
 
 ## Honest limits (read SPEC §2)
 

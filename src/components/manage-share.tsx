@@ -21,14 +21,14 @@ export function ManageShare({ id }: { id: string }) {
   useEffect(() => {
     const fragment = window.location.hash.slice(1);
     tokenRef.current = fragment;
-    (fragment ? fetchAudit(id, fragment) : Promise.resolve(null))
-      .then((report) => {
-        if (report === null) setPhase({ name: "missing-token" });
-        else setPhase({ name: "loaded", report, confirming: false, revoking: false });
-      })
+    // No fragment? The Clerk session cookie may still authorize the owner.
+    fetchAudit(id, fragment || undefined)
+      .then((report) => setPhase({ name: "loaded", report, confirming: false, revoking: false }))
       .catch((err) => {
-        if (err instanceof ShareApiError && err.status === 403) setPhase({ name: "denied" });
-        else if (err instanceof ShareApiError && err.status === 404) setPhase({ name: "gone" });
+        if (err instanceof ShareApiError && err.status === 403) {
+          if (fragment) setPhase({ name: "denied" });
+          else setPhase({ name: "missing-token" });
+        } else if (err instanceof ShareApiError && err.status === 404) setPhase({ name: "gone" });
         else setPhase({ name: "error", message: err instanceof Error ? err.message : "Failed." });
       });
   }, [id]);
@@ -37,7 +37,7 @@ export function ManageShare({ id }: { id: string }) {
     if (phase.name !== "loaded") return;
     setPhase({ ...phase, revoking: true });
     try {
-      await revokeShare(id, tokenRef.current);
+      await revokeShare(id, tokenRef.current || undefined);
       setPhase({ name: "revoked" });
     } catch (err) {
       setPhase({
@@ -50,8 +50,8 @@ export function ManageShare({ id }: { id: string }) {
   async function revokeRecipient(linkId: string) {
     if (phase.name !== "loaded") return;
     try {
-      await revokeShare(id, tokenRef.current, linkId);
-      const report = await fetchAudit(id, tokenRef.current);
+      await revokeShare(id, tokenRef.current || undefined, linkId);
+      const report = await fetchAudit(id, tokenRef.current || undefined);
       setPhase({ name: "loaded", report, confirming: false, revoking: false });
     } catch (err) {
       setPhase({
@@ -68,7 +68,8 @@ export function ManageShare({ id }: { id: string }) {
     return (
       <Notice tone="warn">
         This link has no management token after the <span className="font-mono">#</span>. Use the
-        full management link you were given when the share was created.
+        full management link you were given when the share was created — or, if you created it
+        while signed in, sign in and open it from your dashboard.
       </Notice>
     );
   }
