@@ -13,6 +13,7 @@ export interface ShareRow {
   encrypted_metadata: string;
   policy: SharePolicy;
   management_token_hash: string;
+  parent_share_id: string | null;
   created_at: string;
   expires_at: string | null;
 }
@@ -40,4 +41,26 @@ export function requireManagementToken(req: Request, share: ShareRow): void {
   if (!presented || !tokenMatchesHash(presented, share.management_token_hash)) {
     throw new ApiError(403, "Invalid management token");
   }
+}
+
+export interface RecipientRow {
+  id: string;
+  share_id: string;
+  email_hash: string;
+  email_hint: string | null;
+  link_id: string;
+  views_remaining: number | null;
+  verified_at: string | null;
+  revoked: boolean;
+}
+
+/** Recipient record for a per-recipient link (identity shares only). */
+export async function getRecipientByLink(linkId: string): Promise<RecipientRow | null> {
+  const { data, error } = await wispDb()
+    .from("recipients")
+    .select("*")
+    .eq("link_id", linkId)
+    .maybeSingle();
+  if (error) throw new Error(`recipients lookup failed: ${error.message}`);
+  return data as RecipientRow | null;
 }
