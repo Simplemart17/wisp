@@ -6,7 +6,9 @@ import { type SigningState, ShareApiError, submitSignature } from "@/lib/client/
 import {
   type VerifiedSignature,
   createSignedEnvelope,
+  maskEmail,
   openAndVerifyEnvelope,
+  signatureIdentityMatches,
 } from "@/lib/client/signing";
 import { fromBase64Url } from "@/lib/crypto";
 import { Notice } from "./bits";
@@ -25,25 +27,56 @@ type SignPhase =
   | { name: "done"; signedAt: string }
   | { name: "error"; message: string };
 
+interface DisplaySignature {
+  verified: VerifiedSignature;
+  /** Server-attested identity (from the OTP-verified recipient), the source of truth. */
+  serverEmailHint: string | null;
+  /** True only when the envelope's self-asserted email matches the server's. */
+  identityMatches: boolean;
+}
+
 /**
- * Signature request + verification (zero-knowledge signing). Every envelope
- * is decrypted and cryptographically verified in this browser against the
- * exact bytes the viewer just decrypted — the ✓ is local math, not a server
- * claim. The signer's identity underneath it is the OTP-verified email.
+ * Signature request + verification (zero-knowledge signing).
+ *
+ * Two independent facts are surfaced separately, because they answer different
+ * questions:
+ *  - The ✓ math: the ECDSA signature is valid over the exact bytes this browser
+ *    decrypted — verified locally, not a server claim.
+ *  - The identity: the envelope's signerEmail is CLIENT-asserted, so it is only
+ *    trustworthy when it matches the server's OTP-verified recipient (email_hint,
+ *    sent alongside each envelope). A valid signature whose asserted email does
+ *    NOT match the verified recipient is shown as an identity mismatch — a signer
+ *    cannot silently sign under someone else's name.
  */
 export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: SignaturesProps) {
-  const [verified, setVerified] = useState<VerifiedSignature[] | null>(null);
+  const [verified, setVerified] = useState<DisplaySignature[] | null>(null);
   const [name, setName] = useState("");
   const [phase, setPhase] = useState<SignPhase>({ name: "idle" });
 
   useEffect(() => {
     let cancelled = false;
+    const withHints = signing.envelopes.filter((e) => e.encryptedEnvelope !== null);
     Promise.all(
-      signing.envelopes
-        .filter((e) => e.encryptedEnvelope !== null)
-        .map((e) => openAndVerifyEnvelope(cek, fromBase64Url(e.encryptedEnvelope!), blob).catch(() => null)),
+      withHints.map((e) =>
+        openAndVerifyEnvelope(cek, fromBase64Url(e.encryptedEnvelope!), blob)
+          .then((v): DisplaySignature => ({
+            verified: v,
+            serverEmailHint: e.emailHint,
+            identityMatches: signatureIdentityMatches(v.payload, e.emailHint),
+          }))
+          .catch(() => null),
+      ),
     ).then((results) => {
-      if (!cancelled) setVerified(results.filter((r): r is VerifiedSignature => r !== null));
+      // Never clobber a locally-appended just-signed entry the async verify
+      // didn't include.
+      if (!cancelled) {
+        setVerified((prev) => {
+          const fresh = results.filter((r): r is DisplaySignature => r !== null);
+          if (!prev) return fresh;
+          const known = new Set(fresh.map((r) => r.verified.payload.signedAt));
+          return [...fresh, ...prev.filter((p) => !known.has(p.verified.payload.signedAt))];
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -63,7 +96,14 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
       });
       await submitSignature(linkId, signing.ticket, envelope);
       const own = await openAndVerifyEnvelope(cek, envelope, blob);
-      setVerified((v) => [...(v ?? []), own]);
+      // We just signed with our own OTP-verified email, so identity matches by
+      // construction.
+      const display: DisplaySignature = {
+        verified: own,
+        serverEmailHint: maskEmail(signerEmail),
+        identityMatches: true,
+      };
+      setVerified((v) => [...(v ?? []), display]);
       setPhase({ name: "done", signedAt: own.payload.signedAt });
     } catch (err) {
       if (err instanceof ShareApiError && err.kind === "already_signed") {
@@ -92,22 +132,28 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
         <p className="text-xs text-faded">No one has signed yet.</p>
       ) : (
         <ul className="space-y-2">
-          {verified.map((sig, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm">
-              <span className={sig.valid ? "text-verdigris" : "text-wax"}>
-                {sig.valid ? "✓" : "✗"}
-              </span>
-              <span className="min-w-0">
-                <span className="font-medium">{sig.payload.signerName}</span>{" "}
-                <span className="font-mono text-xs text-faded">({sig.payload.signerEmail})</span>
-                <span className="block text-xs text-faded">
-                  {sig.valid
-                    ? `signed ${new Date(sig.payload.signedAt).toLocaleString()} — cryptographic signature over this exact document`
-                    : `INVALID: ${sig.problem}`}
+          {verified.map((sig, i) => {
+            const trusted = sig.verified.valid && sig.identityMatches;
+            const mark = trusted ? "✓" : sig.verified.valid ? "⚠" : "✗";
+            return (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className={trusted ? "text-verdigris" : "text-wax"}>{mark}</span>
+                <span className="min-w-0">
+                  <span className="font-medium">{sig.verified.payload.signerName}</span>{" "}
+                  <span className="font-mono text-xs text-faded">
+                    ({sig.serverEmailHint ?? sig.verified.payload.signerEmail})
+                  </span>
+                  <span className="block text-xs text-faded">
+                    {!sig.verified.valid
+                      ? `INVALID: ${sig.verified.problem}`
+                      : !sig.identityMatches
+                        ? `Signature is cryptographically valid but the signer's claimed email (${sig.verified.payload.signerEmail}) does not match the verified recipient — treat this identity as unconfirmed.`
+                        : `signed ${new Date(sig.verified.payload.signedAt).toLocaleString()} — cryptographic signature over this exact document, by the verified recipient`}
+                  </span>
                 </span>
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

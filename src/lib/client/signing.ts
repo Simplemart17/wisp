@@ -117,6 +117,25 @@ export interface VerifiedSignature {
   problem: string | null;
 }
 
+/** Same masking the server applies to recipients.email_hint, so the two compare. */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.toLowerCase().trim().split("@");
+  return domain ? `${local.slice(0, 1)}***@${domain}` : email;
+}
+
+/**
+ * The envelope's signerEmail is CLIENT-asserted, so a valid signature alone
+ * does not prove WHO signed. It is only trustworthy when it masks to the same
+ * hint the server derived from the OTP-verified recipient. A null hint means
+ * the server didn't attest this envelope → identity unconfirmed.
+ */
+export function signatureIdentityMatches(
+  payload: SignaturePayload,
+  serverEmailHint: string | null,
+): boolean {
+  return serverEmailHint !== null && maskEmail(payload.signerEmail) === serverEmailHint;
+}
+
 /** Decrypt an envelope and verify it against the document the viewer holds. */
 export async function openAndVerifyEnvelope(
   cek: Uint8Array,

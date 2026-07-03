@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { randomBytes } from "@/lib/crypto/encoding";
-import { createSignedEnvelope, openAndVerifyEnvelope } from "../signing";
+import {
+  createSignedEnvelope,
+  maskEmail,
+  openAndVerifyEnvelope,
+  signatureIdentityMatches,
+} from "../signing";
 
 const cek = randomBytes(32);
 const document = new Blob(["Employment agreement: the undersigned agrees to the terms."]);
@@ -90,5 +95,36 @@ describe("document signing", () => {
     const forged = await openAndVerifyEnvelope(cek, resealed, document);
     expect(forged.valid).toBe(false);
     expect(forged.problem).toMatch(/signature check failed/);
+  });
+});
+
+describe("signature identity binding", () => {
+  it("masks emails the same way the server derives email_hint", () => {
+    expect(maskEmail("Jane@Example.com")).toBe("j***@example.com");
+    expect(maskEmail("sam@y.org")).toBe("s***@y.org");
+  });
+
+  it("confirms identity when the signer's email matches the verified recipient", async () => {
+    const sealed = await createSignedEnvelope(input);
+    const { payload } = await openAndVerifyEnvelope(cek, sealed, document);
+    // Server attests this recipient as j***@example.com.
+    expect(signatureIdentityMatches(payload, "j***@example.com")).toBe(true);
+  });
+
+  it("rejects a cryptographically-valid signature that claims a different identity", async () => {
+    // A recipient signs a VALID envelope (their own ephemeral key, correct doc
+    // hash) but types someone else's email — the math is valid, the identity
+    // is not the server-verified recipient.
+    const sealed = await createSignedEnvelope({ ...input, signerEmail: "ceo@bigcorp.com" });
+    const result = await openAndVerifyEnvelope(cek, sealed, document);
+    expect(result.valid).toBe(true); // ECDSA + doc hash are genuinely valid
+    // ...but the server's verified recipient is jane, so identity must not match.
+    expect(signatureIdentityMatches(result.payload, "j***@example.com")).toBe(false);
+  });
+
+  it("treats a missing server hint as unconfirmed identity", async () => {
+    const sealed = await createSignedEnvelope(input);
+    const { payload } = await openAndVerifyEnvelope(cek, sealed, document);
+    expect(signatureIdentityMatches(payload, null)).toBe(false);
   });
 });
