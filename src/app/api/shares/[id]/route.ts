@@ -1,5 +1,6 @@
 import { enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
 import { getRecipientByLink, getShare, isExhausted, isExpired } from "@/lib/server/shares";
+import type { ShareStatusDto } from "@/lib/shared/api";
 
 export const runtime = "nodejs";
 
@@ -24,15 +25,16 @@ export async function GET(
       if (!recipient || recipient.revoked) {
         return jsonResponse({ error: "Not found", kind: "gone" }, 404);
       }
-      exhausted = recipient.views_remaining !== null && recipient.views_remaining <= 0;
+      exhausted = recipient.viewsRemaining !== null && recipient.viewsRemaining <= 0;
     }
 
-    return jsonResponse({
-      requiresPassword: share.wrapped_cek !== null,
+    const status: ShareStatusDto = {
+      requiresPassword: share.wrappedCek !== null,
       requiresIdentity: share.policy.requireIdentity,
       expired: isExpired(share),
       exhausted,
-    });
+    };
+    return jsonResponse(status);
   } catch (error) {
     return errorResponse(error);
   }

@@ -1,9 +1,7 @@
-import { logAccess } from "@/lib/server/audit";
-import { sendEmail } from "@/lib/server/email";
 import { ApiError, clientIp, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { getRecipientByLink, getShare, isExpired } from "@/lib/server/shares";
-import { bytesToPgHex, wispDb } from "@/lib/server/supabase";
-import { hashIp, tokenMatchesHash } from "@/lib/server/tokens";
+import { submitSignature } from "@/lib/server/services/signing";
+import { getShare } from "@/lib/server/shares";
+import { hashIp } from "@/lib/server/tokens";
 import { BASE64URL_RE } from "@/lib/server/validation";
 
 export const runtime = "nodejs";
@@ -11,10 +9,9 @@ export const runtime = "nodejs";
 const MAX_ENVELOPE_BYTES = 8192;
 
 /**
- * Store a signature envelope. Authorization is the single-use signing ticket
- * minted by /access after the OTP gate — so a signature can only follow a
- * verified, view-consuming open. The envelope is sealed client-side under a
- * CEK subkey: the server attests who/when, but cannot read what was signed.
+ * Store a signature envelope (SPEC §9). Authorization is the single-use
+ * signing ticket minted by /access after the OTP gate — see the signing
+ * service. The envelope is sealed client-side; the server stores it opaquely.
  */
 export async function POST(
   req: Request,
@@ -42,61 +39,14 @@ export async function POST(
     if (!share || !share.policy.requireSignature) {
       return jsonResponse({ error: "Not found", kind: "gone" }, 404);
     }
-    if (isExpired(share)) {
-      return jsonResponse({ error: "This share has expired", kind: "expired" }, 410);
-    }
-    const recipient = await getRecipientByLink(id);
-    if (!recipient || recipient.revoked) {
-      return jsonResponse({ error: "Not found", kind: "gone" }, 404);
-    }
 
-    const recipientRow = recipient as typeof recipient & {
-      sign_ticket_hash: string | null;
-      sign_ticket_expires_at: string | null;
-    };
-    const ticketValid =
-      recipientRow.sign_ticket_hash !== null &&
-      recipientRow.sign_ticket_expires_at !== null &&
-      new Date(recipientRow.sign_ticket_expires_at).getTime() > Date.now() &&
-      tokenMatchesHash(ticket, recipientRow.sign_ticket_hash);
-    if (!ticketValid) {
-      throw new ApiError(403, "Signing ticket is invalid or expired — reopen the share", "ticket");
-    }
-
-    const db = wispDb();
-    const parentId = share.parent_share_id ?? share.id;
-    const { error: insertError } = await db.from("signatures").insert({
-      share_id: parentId,
-      recipient_id: recipient.id,
-      encrypted_envelope: bytesToPgHex(encryptedEnvelope),
-      ip_hash: hashIp(clientIp(req)),
+    const outcome = await submitSignature(share, {
+      ticket,
+      encryptedEnvelope,
+      ipHash: hashIp(clientIp(req)),
     });
-    if (insertError) {
-      if (insertError.code === "23505") {
-        return jsonResponse({ error: "Already signed", kind: "already_signed" }, 409);
-      }
-      throw new Error(`signature insert failed: ${insertError.message}`);
-    }
-
-    // Ticket is single-use.
-    await db
-      .from("recipients")
-      .update({ sign_ticket_hash: null, sign_ticket_expires_at: null })
-      .eq("id", recipient.id);
-
-    await logAccess(req, parentId, "sign", "allowed", recipient.id);
-
-    if (share.policy.notifyEmail) {
-      void sendEmail({
-        to: share.policy.notifyEmail,
-        subject: "Your Wisp document was signed",
-        text:
-          `${recipient.email_hint ?? "A recipient"} just signed the document in share ${parentId}.\n` +
-          `Open the share link to verify the signature cryptographically, or the management link for the audit trail.`,
-      }).catch((err) => console.error("[wisp] sign notification failed:", err));
-    }
-
-    return jsonResponse({ ok: true, signedAt: new Date().toISOString() }, 201);
+    if (!outcome.ok) return jsonResponse({ error: "Already signed", kind: outcome.kind }, 409);
+    return jsonResponse({ ok: true, signedAt: outcome.signedAt }, 201);
   } catch (error) {
     return errorResponse(error);
   }

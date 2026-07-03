@@ -1,10 +1,10 @@
 import { randomInt } from "node:crypto";
 
-import { sendEmail, isValidEmail, normalizeEmail } from "@/lib/server/email";
+import { insertOtp, invalidateLiveOtps } from "@/lib/server/db/access";
+import { isValidEmail, normalizeEmail, sendEmail } from "@/lib/server/email";
 import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { getRecipientByLink, getShare, isExpired } from "@/lib/server/shares";
-import { wispDb } from "@/lib/server/supabase";
 import { sha256Base64Url } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
@@ -39,27 +39,17 @@ export async function POST(
     if (!share || isExpired(share) || !share.policy.requireIdentity) return uniform();
     const recipient = await getRecipientByLink(id);
     if (!recipient || recipient.revoked) return uniform();
-    if (sha256Base64Url(email) !== recipient.email_hash) return uniform();
+    if (sha256Base64Url(email) !== recipient.emailHash) return uniform();
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
-    const db = wispDb();
-    // Retire any earlier live codes for this recipient so exactly one is valid
-    // at a time — otherwise verifyOtp (which checks only the newest) would
-    // silently disable a code the recipient may still be about to enter.
-    await db
-      .from("otp_codes")
-      .update({ consumed: true })
-      .eq("share_id", id)
-      .eq("email_hash", recipient.email_hash)
-      .eq("consumed", false);
-
-    const { error } = await db.from("otp_codes").insert({
-      share_id: id,
-      email_hash: recipient.email_hash,
-      code_hash: sha256Base64Url(code),
-      expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
-    });
-    if (error) throw new Error(`otp insert failed: ${error.message}`);
+    // Retire any earlier live codes so exactly one is valid at a time.
+    await invalidateLiveOtps(id, recipient.emailHash);
+    await insertOtp(
+      id,
+      recipient.emailHash,
+      sha256Base64Url(code),
+      new Date(Date.now() + OTP_TTL_MS).toISOString(),
+    );
 
     await sendEmail({
       to: email,
