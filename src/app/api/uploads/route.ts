@@ -1,5 +1,4 @@
-import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { ApiError, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { CIPHERTEXT_BUCKET, MAX_CIPHERTEXT_BYTES, wispDb } from "@/lib/server/supabase";
 import { generateBlobPath } from "@/lib/server/tokens";
 
@@ -13,9 +12,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    if (!rateLimit(`uploads:${clientIp(req)}`, 30, 10 * 60 * 1000)) {
-      throw new ApiError(429, "Too many uploads, slow down");
-    }
+    enforceRateLimit(req, "uploads", 30, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     const size = body.size;

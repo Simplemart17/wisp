@@ -1,5 +1,4 @@
-import { ApiError, clientIp, errorResponse, jsonResponse } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
 import { getRecipientByLink, getShare, isExhausted, isExpired } from "@/lib/server/shares";
 
 export const runtime = "nodejs";
@@ -14,9 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    if (!rateLimit(`status:${clientIp(req)}`, 120, 10 * 60 * 1000)) {
-      throw new ApiError(429, "Too many requests, slow down");
-    }
+    enforceRateLimit(req, "status", 120, 10 * 60 * 1000);
     const { id } = await params;
     const share = await getShare(id);
     if (!share) return jsonResponse({ error: "Not found", kind: "gone" }, 404);

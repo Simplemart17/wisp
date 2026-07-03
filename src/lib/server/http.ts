@@ -1,4 +1,5 @@
 /** Small helpers shared by all Route Handlers. */
+import { rateLimit } from "./ratelimit";
 
 export class ApiError extends Error {
   constructor(
@@ -64,4 +65,20 @@ export function clientIp(req: Request): string {
     if (hops[idx]) return hops[idx];
   }
   return req.headers.get("x-real-ip") ?? "unknown";
+}
+
+/**
+ * Per-request throttle: `maxRequests` per `windowMs` keyed by `scope` + client
+ * IP. Throws a uniform 429 on trip. Centralizes the boilerplate that otherwise
+ * repeats in every route.
+ */
+export function enforceRateLimit(
+  req: Request,
+  scope: string,
+  maxRequests: number,
+  windowMs: number,
+): void {
+  if (!rateLimit(`${scope}:${clientIp(req)}`, maxRequests, windowMs)) {
+    throw new ApiError(429, "Too many requests, slow down");
+  }
 }

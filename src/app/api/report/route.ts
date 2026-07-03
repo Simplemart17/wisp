@@ -1,7 +1,7 @@
-import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { ApiError, clientIp, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { wispDb } from "@/lib/server/supabase";
 import { hashIp } from "@/lib/server/tokens";
+import { SHARE_ID_RE } from "@/lib/server/validation";
 
 export const runtime = "nodejs";
 
@@ -14,16 +14,14 @@ const REASONS = new Set(["illegal", "malware", "phishing", "other"]);
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    if (!rateLimit(`report:${clientIp(req)}`, 5, 10 * 60 * 1000)) {
-      throw new ApiError(429, "Too many reports, slow down");
-    }
+    enforceRateLimit(req, "report", 5, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     if (typeof body.reason !== "string" || !REASONS.has(body.reason)) {
       throw new ApiError(400, "reason must be one of: illegal, malware, phishing, other");
     }
     const shareId =
-      typeof body.shareId === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(body.shareId)
+      typeof body.shareId === "string" && SHARE_ID_RE.test(body.shareId)
         ? body.shareId
         : null;
     const details = typeof body.details === "string" ? body.details.slice(0, 2000) : null;

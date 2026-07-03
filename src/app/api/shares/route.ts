@@ -1,6 +1,5 @@
-import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
+import { enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { parseCreateShare } from "@/lib/server/policy";
-import { rateLimit } from "@/lib/server/ratelimit";
 import { senderUserId } from "@/lib/server/sender-auth";
 import { CIPHERTEXT_BUCKET, bytesToPgHex, wispDb } from "@/lib/server/supabase";
 import { emailHint } from "@/lib/server/email";
@@ -22,9 +21,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    if (!rateLimit(`shares:${clientIp(req)}`, 20, 10 * 60 * 1000)) {
-      throw new ApiError(429, "Too many shares created, slow down");
-    }
+    enforceRateLimit(req, "shares", 20, 10 * 60 * 1000);
 
     const input = parseCreateShare(await readJsonBody(req));
     const id = generateShareId();
