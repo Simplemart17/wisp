@@ -22,6 +22,11 @@ Full design: [SPEC.md](SPEC.md).
 - **View-only + watermark** (client-honored, honestly labeled) — content
   renders only to `<canvas>`; a visible identity tile plus an invisible
   DCT forensic mark are burned into the pixels. Trace leaks at `/decode`.
+- **Document signing** (zero-knowledge e-signatures) — verified recipients
+  sign in their browser: an ECDSA P-256 signature over the exact plaintext,
+  sealed under a key derived from the share's CEK. The server attests *who*
+  and *when* (OTP identity + timestamp) but can never read *what* was signed;
+  anyone who can open the share verifies signatures locally.
 - **Revoke & audit** — anonymous senders get a one-time management link;
   hard-delete the blob, or revoke a single recipient.
 - **Notify-on-open**, abuse reporting, hashed IPs everywhere, nonce-based CSP,
