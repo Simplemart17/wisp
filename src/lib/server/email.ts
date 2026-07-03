@@ -51,7 +51,4 @@ export function normalizeEmail(email: string): string {
 }
 
 /** "jane@example.com" → "j***@example.com" — sender-facing label, not identity. */
-export function emailHint(email: string): string {
-  const [local, domain] = normalizeEmail(email).split("@");
-  return `${local.slice(0, 1)}***@${domain}`;
-}
+export { maskEmail as emailHint } from "@/lib/email-mask";

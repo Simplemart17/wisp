@@ -9,13 +9,15 @@
  * gate + timestamp), while WHAT was signed stays cryptographically bound but
  * invisible to it. Anyone who can decrypt the share can verify locally.
  */
+import { GCM_NONCE_LENGTH } from "@/lib/crypto";
 import { concatBytes, fromBase64Url, randomBytes, toBase64Url, utf8Decode, utf8Encode } from "@/lib/crypto/encoding";
 import { WispCryptoError } from "@/lib/crypto/errors";
+import { maskEmail } from "@/lib/email-mask";
 
 export const SIGNATURE_VERSION = 1;
 const INFO_SIGNATURE_KEY = "wisp/v1/signature-key";
 const AAD_SIGNATURE = utf8Encode("wisp/v1/sig");
-const NONCE_LENGTH = 12;
+const NONCE_LENGTH = GCM_NONCE_LENGTH;
 
 export interface SignaturePayload {
   v: number;
@@ -117,11 +119,9 @@ export interface VerifiedSignature {
   problem: string | null;
 }
 
-/** Same masking the server applies to recipients.email_hint, so the two compare. */
-export function maskEmail(email: string): string {
-  const [local, domain] = email.toLowerCase().trim().split("@");
-  return domain ? `${local.slice(0, 1)}***@${domain}` : email;
-}
+// Re-exported so callers importing from the signing module keep working; the
+// canonical implementation is shared with the server's email_hint.
+export { maskEmail };
 
 /**
  * The envelope's signerEmail is CLIENT-asserted, so a valid signature alone
