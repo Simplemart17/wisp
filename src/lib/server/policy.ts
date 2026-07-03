@@ -26,6 +26,7 @@ export interface SharePolicy {
   maxViews: number | null;
   password: boolean;
   requireIdentity: boolean; // server-enforced email OTP gate
+  requireSignature: boolean; // cryptographic ECDSA envelope + server-attested identity
   viewOnly: boolean; // client-honored: no download affordance
   watermark: boolean; // client-honored: burned into the rendered canvas
   notifyEmail: string | null; // notify-on-open target (sender-provided)
@@ -149,10 +150,14 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
   ) {
     throw new ApiError(400, `policy.maxViews must be null or an integer 1..${MAX_VIEWS_CAP}`);
   }
-  for (const flag of ["requireIdentity", "viewOnly", "watermark"] as const) {
+  for (const flag of ["requireIdentity", "requireSignature", "viewOnly", "watermark"] as const) {
     if (p[flag] !== undefined && typeof p[flag] !== "boolean") {
       throw new ApiError(400, `policy.${flag} must be a boolean`);
     }
+  }
+  if (p.requireSignature === true && p.requireIdentity !== true) {
+    // A signature without a verified signer is close to meaningless.
+    throw new ApiError(400, "requireSignature needs requireIdentity");
   }
   if (p.notifyEmail !== undefined && p.notifyEmail !== null && !isValidEmail(p.notifyEmail)) {
     throw new ApiError(400, "policy.notifyEmail must be a valid email address");
@@ -172,6 +177,7 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
       maxViews: (p.maxViews as number | undefined) ?? null,
       password: wrappedCek !== null,
       requireIdentity,
+      requireSignature: p.requireSignature === true,
       viewOnly: p.viewOnly === true,
       watermark: p.watermark === true,
       notifyEmail: (p.notifyEmail as string | undefined) ? normalizeEmail(p.notifyEmail as string) : null,

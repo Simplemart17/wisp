@@ -2,7 +2,7 @@ import { clientIp } from "./http";
 import { wispDb } from "./supabase";
 import { hashIp } from "./tokens";
 
-export type AuditAction = "view" | "download" | "otp_fail" | "revoke";
+export type AuditAction = "view" | "download" | "otp_fail" | "revoke" | "sign";
 export type AuditResult = "allowed" | "denied" | "expired" | "exhausted";
 
 /**
