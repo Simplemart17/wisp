@@ -40,9 +40,28 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
   return body as Record<string, unknown>;
 }
 
-/** Client IP for rate limiting / hashed audit logging. */
+/**
+ * Client IP for rate limiting / hashed audit logging.
+ *
+ * The LEFTMOST X-Forwarded-For entry is client-supplied and trivially spoofed,
+ * which would let an attacker mint a fresh rate-limit bucket per request and
+ * forge audit IP hashes. Trusted proxies append the real peer on the RIGHT, so
+ * we read `WISP_TRUSTED_PROXY_DEPTH` hops in from the right (default 1 — one
+ * trusted proxy such as Vercel's edge). Operators behind N proxies set N;
+ * self-hosters with no proxy set 0 to ignore XFF entirely.
+ */
 export function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
+  const depth = Number.parseInt(process.env.WISP_TRUSTED_PROXY_DEPTH ?? "1", 10);
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff && Number.isInteger(depth) && depth >= 1) {
+    const hops = xff
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean);
+    // depth hops from the right are our own trusted proxies; the client sits
+    // just left of them. Clamp to the leftmost if the chain is shorter.
+    const idx = Math.max(0, hops.length - depth);
+    if (hops[idx]) return hops[idx];
+  }
   return req.headers.get("x-real-ip") ?? "unknown";
 }

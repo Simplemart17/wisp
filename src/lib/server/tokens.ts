@@ -36,8 +36,25 @@ export function tokenMatchesHash(presented: string, storedHash: string): boolean
   return stored.length === presentedDigest.length && timingSafeEqual(presentedDigest, stored);
 }
 
+// A hardcoded default salt would make the 32-bit IPv4 space trivially
+// rainbow-tableable, so when WISP_IP_SALT is unset we fall back to a random
+// per-process salt (non-reversible) rather than a known constant. The tradeoff
+// is that hashes no longer correlate across restarts/instances — set
+// WISP_IP_SALT in production for stable, still-irreversible attribution.
+const FALLBACK_IP_SALT = base64Url(nodeRandomBytes(16));
+let warnedNoIpSalt = false;
+
 /** Salted, truncated IP hash for the audit log — attributable, not reversible. */
 export function hashIp(ip: string): string {
-  const salt = process.env.WISP_IP_SALT ?? "wisp-dev-salt";
+  let salt = process.env.WISP_IP_SALT;
+  if (!salt) {
+    if (!warnedNoIpSalt) {
+      console.warn(
+        "[wisp] WISP_IP_SALT is unset — using a random per-process salt. Audit IP hashes will not correlate across restarts or instances. Set WISP_IP_SALT in production.",
+      );
+      warnedNoIpSalt = true;
+    }
+    salt = FALLBACK_IP_SALT;
+  }
   return base64Url(createHash("sha256").update(`${salt}:${ip}`).digest()).slice(0, 16);
 }
