@@ -30,14 +30,3 @@ export function wispDb(): WispClient {
   cached = createWispClient(url, secretKey);
   return cached;
 }
-
-/** PostgREST transports bytea as hex strings — convert both directions. */
-export function bytesToPgHex(base64url: string): string {
-  return `\\x${Buffer.from(base64url, "base64url").toString("hex")}`;
-}
-
-export function pgHexToBase64Url(pgHex: string | null): string | null {
-  if (pgHex === null) return null;
-  if (!pgHex.startsWith("\\x")) throw new Error("Unexpected bytea encoding from PostgREST");
-  return Buffer.from(pgHex.slice(2), "hex").toString("base64url");
-}
