@@ -3,6 +3,7 @@
  * everything is checked. `recipients` is returned separately — it drives row
  * creation (per-recipient links), it is never stored inside the policy JSON.
  */
+import type { KdfParams } from "@/lib/crypto";
 import { isValidEmail, normalizeEmail } from "./email";
 import { ApiError } from "./http";
 import { BASE64URL_RE, base64UrlByteLength } from "./validation";
@@ -37,7 +38,7 @@ export interface ValidatedCreateShare {
   encryptedMetadata: string; // base64url
   wrappedCek: string | null;
   kdfSalt: string | null;
-  kdfParams: Record<string, unknown> | null;
+  kdfParams: KdfParams | null;
   policy: SharePolicy;
   /** Normalized, deduplicated recipient emails (empty unless requireIdentity). */
   recipients: string[];
@@ -57,7 +58,7 @@ function requireBase64Url(value: unknown, field: string, exactBytes?: number): s
 
 // Mirrors the client-side validateKdfParams bounds without importing the
 // browser crypto module (which drags hash-wasm into the server bundle).
-function validateKdfParams(value: unknown): Record<string, unknown> {
+function validateKdfParams(value: unknown): KdfParams {
   const p = value as Record<string, unknown>;
   const ok =
     typeof p === "object" &&
@@ -78,12 +79,12 @@ function validateKdfParams(value: unknown): Record<string, unknown> {
     (p.hashLength as number) <= 64;
   if (!ok) throw new ApiError(400, "kdfParams out of range");
   return {
-    algorithm: p.algorithm,
-    version: p.version,
-    iterations: p.iterations,
-    memorySize: p.memorySize,
-    parallelism: p.parallelism,
-    hashLength: p.hashLength,
+    algorithm: "argon2id",
+    version: p.version as number,
+    iterations: p.iterations as number,
+    memorySize: p.memorySize as number,
+    parallelism: p.parallelism as number,
+    hashLength: p.hashLength as number,
   };
 }
 
