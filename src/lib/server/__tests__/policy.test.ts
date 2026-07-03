@@ -33,6 +33,7 @@ describe("parseCreateShare", () => {
   it("accepts a minimal passwordless share", () => {
     const parsed = parseCreateShare(validBody());
     expect(parsed.policy).toEqual({
+      v: 1,
       expiresIn: "7d",
       maxViews: 3,
       password: false,
