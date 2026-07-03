@@ -31,14 +31,12 @@ const STEP_LABELS: Record<CreateStep, string> = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function isRenderable(type: string): boolean {
-  return (
-    type.startsWith("text/") ||
-    type.startsWith("image/") ||
-    type.startsWith("audio/") ||
-    type.startsWith("video/") ||
-    type === "application/pdf"
-  );
+// Types the viewer paints to <canvas> — the only ones where view-only (no
+// download affordance) and a burned watermark can actually be honored. Audio
+// and video can be played but not watermarked, and native controls defeat
+// view-only, so those controls are not offered for them.
+function isCanvasRenderable(type: string): boolean {
+  return type.startsWith("text/") || type.startsWith("image/") || type === "application/pdf";
 }
 
 interface PolicyState {
@@ -92,7 +90,9 @@ export function CreateShare() {
   const fileInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
 
-  const fileRenderable = mode === "message" || !file || isRenderable(file.type || "");
+  // Message shares are plain text (canvas-renderable). File shares qualify only
+  // for text/image/pdf — the types view-only + watermark can actually protect.
+  const fileRenderable = mode === "message" || (!!file && isCanvasRenderable(file.type || ""));
 
   function setPolicyField<K extends keyof PolicyState>(key: K, value: PolicyState[K]) {
     setPolicy((p) => ({ ...p, [key]: value }));
@@ -157,8 +157,8 @@ export function CreateShare() {
         requireIdentity: policy.requireIdentity,
         requireSignature: policy.requireSignature,
         recipients,
-        viewOnly: policy.viewOnly && (mode === "message" || isRenderable(type)),
-        watermark: policy.watermark,
+        viewOnly: policy.viewOnly && fileRenderable,
+        watermark: policy.watermark && fileRenderable,
         notifyEmail: policy.notify ? notifyEmail : null,
         sendEmails: policy.requireIdentity && sendEmails,
         onStep: (step) => setPhase({ name: "working", step }),
@@ -459,7 +459,7 @@ export function CreateShare() {
                 <span className="block text-xs leading-relaxed text-faded">
                   {fileRenderable
                     ? "Renders to pixels in the Wisp viewer with no download button. Deters saving; cannot stop screenshots."
-                    : "This file type can't be rendered in the viewer, so it will fall back to an encrypted download."}
+                    : "Only text, images, and PDFs can be shown view-only. Other files (including audio/video) fall back to an encrypted download."}
                 </span>
               </span>
             </label>
@@ -467,7 +467,8 @@ export function CreateShare() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                checked={policy.watermark}
+                checked={policy.watermark && fileRenderable}
+                disabled={!fileRenderable}
                 onChange={(e) => setPolicyField("watermark", e.target.checked)}
                 className="mt-1 accent-verdigris"
               />
@@ -476,9 +477,10 @@ export function CreateShare() {
                   Watermark <TierChip tier="client-honored" />
                 </span>
                 <span className="block text-xs leading-relaxed text-faded">
-                  Burns the viewer&apos;s identity, time, and access id into the rendered pixels —
-                  leaks stay traceable, even via screenshot.
-                  {policy.watermark && !policy.requireIdentity
+                  {fileRenderable
+                    ? "Burns the viewer's identity, time, and access id into the rendered pixels — leaks stay traceable, even via screenshot."
+                    : "Watermarking needs a text, image, or PDF to render — not available for this file type."}
+                  {fileRenderable && policy.watermark && !policy.requireIdentity
                     ? " Without “Require identity” it stamps the link id and time, not a person — enable both for accountability."
                     : ""}
                 </span>

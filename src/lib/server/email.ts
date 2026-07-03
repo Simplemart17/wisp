@@ -10,13 +10,19 @@ export interface OutgoingEmail {
   text: string;
 }
 
+// The URL fragment after `#` is the decryption link-key — it must never be
+// written to logs. Redact it from any URL before console output.
+function redactFragments(text: string): string {
+  return text.replace(/(https?:\/\/\S+?)#\S+/g, "$1#<link-key-redacted>");
+}
+
 export async function sendEmail(email: OutgoingEmail): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.WISP_EMAIL_FROM ?? "Wisp <onboarding@resend.dev>";
 
   if (!apiKey) {
     console.log(
-      `[wisp:email:dev] to=${email.to} subject=${JSON.stringify(email.subject)}\n${email.text}`,
+      `[wisp:email:dev] to=${email.to} subject=${JSON.stringify(email.subject)}\n${redactFragments(email.text)}`,
     );
     return;
   }

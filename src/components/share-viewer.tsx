@@ -348,6 +348,9 @@ function OpenedView({
   const canvasHost = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // Whether the invisible forensic mark actually got embedded — it is skipped
+  // for very large rasters, so the microcopy must not over-claim.
+  const [forensicEmbedded, setForensicEmbedded] = useState(false);
 
   useEffect(() => {
     if (!useCanvas || !canvasHost.current) return;
@@ -364,6 +367,7 @@ function OpenedView({
         canvases = [renderTextToCanvas(await blob.text())];
       }
       if (cancelled) return;
+      let anyForensic = false;
       for (const canvas of canvases) {
         if (watermark) {
           applyVisibleWatermark(canvas, watermarkLines(watermark));
@@ -371,12 +375,16 @@ function OpenedView({
             // Invisible forensic layer: the access id, recoverable from leaks.
             const ctx = canvas.getContext("2d")!;
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            if (embedForensic(imageData, watermark.accessId)) ctx.putImageData(imageData, 0, 0);
+            if (embedForensic(imageData, watermark.accessId)) {
+              ctx.putImageData(imageData, 0, 0);
+              anyForensic = true;
+            }
           }
         }
         canvas.className = "block w-full h-auto border border-mist rounded-sm bg-white";
         host.appendChild(canvas);
       }
+      if (!cancelled) setForensicEmbedded(anyForensic);
     })().catch((err) => {
       if (!cancelled) setRenderError(err instanceof Error ? err.message : "Rendering failed.");
     });
@@ -400,7 +408,9 @@ function OpenedView({
       a.href = url;
       a.download = out.name;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoke on the next tick — revoking in the same synchronous frame can
+      // cancel the download of a large blob before the browser reads it.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } finally {
       setDownloading(false);
     }
@@ -463,10 +473,16 @@ function OpenedView({
         ) : null}
       </div>
 
-      {watermark ? (
+      {watermark && useCanvas ? (
         <p className="text-xs leading-relaxed text-faded">
-          This rendering is watermarked to {watermark.email ?? "this link"} — a visible tile plus
-          an invisible forensic mark are burned into the pixels, so copies stay traceable.
+          This rendering is watermarked to {watermark.email ?? "this link"} — a visible tile
+          {forensicEmbedded ? " plus an invisible forensic mark are" : " is"} burned into the
+          pixels, so copies stay traceable.
+        </p>
+      ) : watermark ? (
+        <p className="text-xs leading-relaxed text-faded">
+          A watermark was requested, but this content type can&apos;t be watermarked in the
+          viewer — the request is recorded, though no mark is burned into playback.
         </p>
       ) : null}
       <p className="text-xs leading-relaxed text-faded">
