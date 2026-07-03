@@ -180,11 +180,18 @@ export function CreateShare() {
   if (phase.name === "receipt") {
     const { receipt, summary } = phase;
     return (
-      <section className="unfog space-y-5">
-        <h1 className="font-display text-3xl">Sealed.</h1>
-        <p className="text-sm text-faded">{summary}</p>
+      <section className="unfog space-y-6">
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-verdigris/12 text-verdigris">
+            ✓
+          </span>
+          <div>
+            <h1 className="font-display text-3xl leading-none">Sealed.</h1>
+            <p className="mt-1 font-mono text-xs text-faded">{summary}</p>
+          </div>
+        </div>
 
-        <div className="space-y-5 border border-mist bg-white/60 p-5 border-dashed">
+        <div className="elevate space-y-5 rounded-md border border-mist bg-card p-5">
           {receipt.recipientLinks.length > 0 ? (
             <>
               {receipt.recipientLinks.map((r) => (
@@ -200,13 +207,19 @@ export function CreateShare() {
           ) : (
             <CopyField label="share link" value={receipt.shareUrl} />
           )}
-          <CopyField label="management link" value={receipt.manageUrl} hint="shown once — save it" />
-          <p className="text-xs leading-relaxed text-faded">
-            The share link carries the decryption key after the{" "}
-            <span className="font-mono">#</span> — send it over a channel you trust. The
-            management link lets you revoke this share and see who opened it; it cannot be
-            recovered if lost.
-          </p>
+          <div className="border-t border-mist pt-5">
+            <CopyField
+              label="management link"
+              value={receipt.manageUrl}
+              hint="shown once — save it"
+            />
+            <p className="mt-2 text-xs leading-relaxed text-faded">
+              The share link carries the decryption key after the{" "}
+              <span className="font-mono text-ink">#</span> — send it over a channel you trust.
+              The management link lets you revoke this share and read its audit log; it can&apos;t
+              be recovered if lost.
+            </p>
+          </div>
         </div>
 
         <button
@@ -219,7 +232,7 @@ export function CreateShare() {
             setRecipientsText("");
             if (fileInput.current) fileInput.current.value = "";
           }}
-          className="rounded-sm border border-mist px-4 py-2 text-sm hover:border-verdigris hover:text-verdigris"
+          className="rounded-sm border border-mist px-4 py-2.5 text-sm font-medium transition-colors hover:border-ink"
         >
           Seal another
         </button>
@@ -230,30 +243,41 @@ export function CreateShare() {
   const working = phase.name === "working";
 
   return (
-    <section>
-      <h1 className="font-display text-3xl">
-        Share something that <em className="text-verdigris">disappears</em>.
+    <section className="rise">
+      <h1 className="font-display text-4xl leading-[1.05] tracking-tight sm:text-[2.75rem]">
+        Share something
+        <br />
+        that <span className="text-verdigris">disappears.</span>
       </h1>
-      <p className="mt-2 mb-6 text-sm leading-relaxed text-faded">
-        Encrypted in your browser before it leaves. Expires on your terms.
+      <p className="mt-3 mb-8 max-w-md text-[15px] leading-relaxed text-faded">
+        Encrypted in your browser before it leaves. It expires, burns after reading, or vanishes
+        on revoke — on your terms.
       </p>
 
-      <div className="mb-8 grid grid-cols-3 gap-2">
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.name}
-            type="button"
-            onClick={() => applyPreset(preset)}
-            className={`rounded-sm border px-3 py-2 text-left ${
-              activePreset === preset.name
-                ? "border-verdigris bg-verdigris/5"
-                : "border-mist hover:border-verdigris/50"
-            }`}
-          >
-            <span className="block text-sm font-medium">{preset.name}</span>
-            <span className="mt-0.5 block text-[11px] leading-tight text-faded">{preset.hint}</span>
-          </button>
-        ))}
+      <div className="mb-8 grid grid-cols-3 gap-2.5">
+        {PRESETS.map((preset) => {
+          const active = activePreset === preset.name;
+          return (
+            <button
+              key={preset.name}
+              type="button"
+              onClick={() => applyPreset(preset)}
+              aria-pressed={active}
+              className={`rounded-sm border px-3 py-2.5 text-left transition-all ${
+                active
+                  ? "border-ink bg-ink text-paper"
+                  : "border-mist bg-card/60 hover:border-ink/40"
+              }`}
+            >
+              <span className="block text-sm font-semibold">{preset.name}</span>
+              <span
+                className={`mt-1 block text-[11px] leading-snug ${active ? "text-paper/70" : "text-faded"}`}
+              >
+                {preset.hint}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <form onSubmit={submit} className="space-y-6">
@@ -280,10 +304,10 @@ export function CreateShare() {
             onChange={(e) => setMessage(e.target.value)}
             rows={6}
             placeholder="Write the message to seal…"
-            className="w-full resize-y rounded-sm border border-mist bg-white/60 p-3 font-mono text-sm leading-relaxed placeholder:text-faded/60 focus:border-verdigris focus:outline-none"
+            className="w-full resize-y rounded-sm border border-mist bg-card p-3 font-mono text-sm leading-relaxed placeholder:text-hush focus:border-verdigris focus:outline-none"
           />
         ) : (
-          <label className="flex cursor-pointer flex-col items-center gap-1 rounded-sm border border-mist bg-white/60 px-4 py-8 text-sm text-faded border-dashed hover:border-verdigris">
+          <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-sm border border-dashed border-mist bg-card px-4 py-10 text-sm text-faded transition-colors hover:border-verdigris hover:bg-verdigris/[3%]">
             <input
               ref={fileInput}
               type="file"
@@ -292,12 +316,12 @@ export function CreateShare() {
             />
             {file ? (
               <>
-                <span className="font-mono text-ink">{file.name}</span>
+                <span className="font-mono text-sm text-ink">{file.name}</span>
                 <span className="font-mono text-xs">{formatBytes(file.size)}</span>
               </>
             ) : (
               <>
-                <span>Choose a file to seal</span>
+                <span className="font-medium text-ink">Choose a file to seal</span>
                 <span className="font-mono text-xs">up to {formatBytes(MAX_PLAINTEXT_BYTES)}</span>
               </>
             )}
@@ -305,9 +329,7 @@ export function CreateShare() {
         )}
 
         <fieldset className="space-y-4">
-          <legend className="mb-3 font-mono text-[11px] uppercase tracking-widest text-faded">
-            Policy
-          </legend>
+          <legend className="mb-3 text-xs font-semibold tracking-tight text-faded">Policy</legend>
 
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
@@ -317,7 +339,7 @@ export function CreateShare() {
               <select
                 value={policy.expiresIn}
                 onChange={(e) => setPolicyField("expiresIn", e.target.value)}
-                className="w-full rounded-sm border border-mist bg-white/60 px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
+                className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
               >
                 {EXPIRY_CHOICES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -334,7 +356,7 @@ export function CreateShare() {
               <select
                 value={policy.maxViews}
                 onChange={(e) => setPolicyField("maxViews", e.target.value)}
-                className="w-full rounded-sm border border-mist bg-white/60 px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
+                className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
               >
                 {VIEW_CHOICES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -361,17 +383,17 @@ export function CreateShare() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
               placeholder="Adds a second key the link alone can't provide"
-              className="w-full rounded-sm border border-mist bg-white/60 px-3 py-2 text-sm placeholder:text-faded/60 focus:border-verdigris focus:outline-none"
+              className="w-full rounded-sm border border-mist bg-card px-3 py-2 text-sm placeholder:text-hush focus:border-verdigris focus:outline-none"
             />
           </label>
 
-          <div className="space-y-3 rounded-sm border border-mist bg-white/40 p-4">
+          <div className="space-y-3 rounded-sm border border-mist bg-card/50 p-4">
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
                 checked={policy.requireIdentity}
                 onChange={(e) => setPolicyField("requireIdentity", e.target.checked)}
-                className="mt-1 accent-verdigris"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-verdigris"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm">
@@ -391,7 +413,7 @@ export function CreateShare() {
                   onChange={(e) => setRecipientsText(e.target.value)}
                   rows={2}
                   placeholder={"jane@example.com, sam@example.com"}
-                  className="w-full rounded-sm border border-mist bg-white/60 p-2 font-mono text-xs placeholder:text-faded/60 focus:border-verdigris focus:outline-none"
+                  className="w-full rounded-sm border border-mist bg-card p-2 font-mono text-xs placeholder:text-hush focus:border-verdigris focus:outline-none"
                 />
                 <label className="flex items-center gap-2 text-xs text-faded">
                   <input
@@ -419,7 +441,7 @@ export function CreateShare() {
                   }));
                   setActivePreset(null);
                 }}
-                className="mt-1 accent-verdigris"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-verdigris"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm">
@@ -444,7 +466,7 @@ export function CreateShare() {
                 checked={policy.viewOnly && fileRenderable}
                 disabled={!fileRenderable}
                 onChange={(e) => setPolicyField("viewOnly", e.target.checked)}
-                className="mt-1 accent-verdigris"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-verdigris"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm">
@@ -464,7 +486,7 @@ export function CreateShare() {
                 checked={policy.watermark && fileRenderable}
                 disabled={!fileRenderable}
                 onChange={(e) => setPolicyField("watermark", e.target.checked)}
-                className="mt-1 accent-verdigris"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-verdigris"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm">
@@ -486,7 +508,7 @@ export function CreateShare() {
                 type="checkbox"
                 checked={policy.notify}
                 onChange={(e) => setPolicyField("notify", e.target.checked)}
-                className="mt-1 accent-verdigris"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-verdigris"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm">
@@ -498,7 +520,7 @@ export function CreateShare() {
                     value={notifyEmail}
                     onChange={(e) => setNotifyEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="mt-1 w-full rounded-sm border border-mist bg-white/60 px-2 py-1.5 text-xs placeholder:text-faded/60 focus:border-verdigris focus:outline-none"
+                    className="mt-1 w-full rounded-sm border border-mist bg-card px-2 py-1.5 text-xs placeholder:text-hush focus:border-verdigris focus:outline-none"
                   />
                 ) : (
                   <span className="block text-xs text-faded">
@@ -515,9 +537,21 @@ export function CreateShare() {
         <button
           type="submit"
           disabled={working}
-          className="w-full rounded-sm bg-verdigris px-4 py-3 text-sm font-medium text-white hover:bg-verdigris-deep disabled:opacity-60"
+          className="group flex w-full items-center justify-center gap-2 rounded-sm bg-ink px-4 py-3.5 text-sm font-semibold text-paper transition-colors hover:bg-verdigris-deep disabled:opacity-55"
         >
-          {working ? STEP_LABELS[(phase as { step: CreateStep }).step] : "Encrypt & create link"}
+          {working ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-verdigris" />
+              {STEP_LABELS[(phase as { step: CreateStep }).step]}
+            </>
+          ) : (
+            <>
+              Encrypt &amp; create link
+              <span aria-hidden className="transition-transform group-hover:translate-x-0.5">
+                →
+              </span>
+            </>
+          )}
         </button>
       </form>
     </section>
