@@ -51,6 +51,7 @@ export interface CreateShareOptions {
   expiresIn: string;
   maxViews: number | null;
   requireIdentity?: boolean;
+  requireSignature?: boolean;
   recipients?: string[];
   viewOnly?: boolean;
   watermark?: boolean;
@@ -112,6 +113,7 @@ export async function createShareFlow(options: CreateShareOptions): Promise<Shar
       expiresIn: options.expiresIn,
       maxViews: options.maxViews,
       requireIdentity: options.requireIdentity === true,
+      requireSignature: options.requireSignature === true,
       viewOnly: options.viewOnly === true,
       watermark: options.watermark === true,
       notifyEmail: options.notifyEmail || null,
@@ -168,6 +170,20 @@ export interface WatermarkPayload {
   linkId: string;
 }
 
+export interface SignatureRecord {
+  encryptedEnvelope: string | null; // base64url, sealed under the CEK subkey
+  signedAt: string;
+  emailHint: string | null;
+}
+
+export interface SigningState {
+  required: boolean;
+  /** Single-use ticket for THIS recipient; null when not theirs to sign. */
+  ticket: string | null;
+  alreadySigned: boolean;
+  envelopes: SignatureRecord[];
+}
+
 /**
  * Everything needed to decrypt, fetched in one go. Kept by the viewer so a
  * mistyped password can be retried WITHOUT consuming another view.
@@ -179,6 +195,7 @@ export interface AccessedShare {
   kdfSalt: Uint8Array | null;
   kdfParams: KdfParams | null;
   remainingViews: number | null;
+  signing: SigningState | null;
   viewOnly: boolean;
   watermark: WatermarkPayload | null;
 }
@@ -196,6 +213,7 @@ export async function accessShare(id: string, credentials?: AccessCredentials): 
     kdfSalt: string | null;
     kdfParams: KdfParams | null;
     remainingViews: number | null;
+    signing: SigningState | null;
     viewOnly: boolean;
     watermark: WatermarkPayload | null;
   }>(`/api/shares/${id}/access`, credentials ?? {});
@@ -211,15 +229,30 @@ export async function accessShare(id: string, credentials?: AccessCredentials): 
     kdfSalt: payload.kdfSalt ? fromBase64Url(payload.kdfSalt) : null,
     kdfParams: payload.kdfParams,
     remainingViews: payload.remainingViews,
+    signing: payload.signing,
     viewOnly: payload.viewOnly,
     watermark: payload.watermark,
   };
+}
+
+/** Upload a sealed signature envelope using the single-use signing ticket. */
+export async function submitSignature(
+  id: string,
+  ticket: string,
+  encryptedEnvelope: Uint8Array,
+): Promise<void> {
+  await postJson<{ ok: boolean }>(`/api/shares/${id}/sign`, {
+    ticket,
+    encryptedEnvelope: toBase64Url(encryptedEnvelope),
+  });
 }
 
 export interface OpenedShare {
   /** Decrypted content as a typed Blob (never one giant contiguous buffer). */
   blob: Blob;
   metadata: ShareMetadata;
+  /** Kept in-browser for signature sealing/verification — never uploaded. */
+  cek: Uint8Array;
 }
 
 /** Local decryption only — safe to retry with a corrected password. */
@@ -254,6 +287,7 @@ export interface RecipientStatus {
   views_remaining: number | null;
   verified_at: string | null;
   revoked: boolean;
+  signedAt: string | null;
 }
 
 export interface AuditReport {
@@ -266,6 +300,7 @@ export interface AuditReport {
     remainingViews: number | null;
     requiresPassword: boolean;
     requiresIdentity: boolean;
+    requiresSignature: boolean;
     viewOnly: boolean;
     watermark: boolean;
   };

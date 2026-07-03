@@ -39,11 +39,26 @@ export async function GET(
     if (share.policy.requireIdentity) {
       const { data, error: recipientsError } = await db
         .from("recipients")
-        .select("link_id, email_hint, views_remaining, verified_at, revoked")
+        .select("id, link_id, email_hint, views_remaining, verified_at, revoked")
         .eq("share_id", id)
         .order("email_hint");
       if (recipientsError) throw new Error(`recipients read failed: ${recipientsError.message}`);
-      recipients = data ?? [];
+
+      let signedAtByRecipient = new Map<string, string>();
+      if (share.policy.requireSignature) {
+        const { data: sigs, error: sigError } = await db
+          .from("signatures")
+          .select("recipient_id, created_at")
+          .eq("share_id", id);
+        if (sigError) throw new Error(`signatures read failed: ${sigError.message}`);
+        signedAtByRecipient = new Map(
+          (sigs ?? []).map((s) => [s.recipient_id as string, s.created_at as string]),
+        );
+      }
+      recipients = (data ?? []).map(({ id: recipientId, ...rest }) => ({
+        ...rest,
+        signedAt: signedAtByRecipient.get(recipientId as string) ?? null,
+      }));
     }
 
     return jsonResponse({
@@ -56,6 +71,7 @@ export async function GET(
         remainingViews: share.policy.maxViews,
         requiresPassword: share.policy.password,
         requiresIdentity: share.policy.requireIdentity,
+        requiresSignature: share.policy.requireSignature,
         viewOnly: share.policy.viewOnly,
         watermark: share.policy.watermark,
       },

@@ -126,7 +126,11 @@ export async function createEncryptedShareFromBlob(input: {
   };
 }
 
-/** Streaming counterpart of openEncryptedShare — recipient side. */
+/**
+ * Streaming counterpart of openEncryptedShare — recipient side. The CEK is
+ * returned so the viewer can seal/verify signature envelopes; it never leaves
+ * the browser.
+ */
 export async function openEncryptedShareBlob(input: {
   linkKey: string;
   ciphertext: Blob;
@@ -135,7 +139,7 @@ export async function openEncryptedShareBlob(input: {
   kdfSalt?: Uint8Array | null;
   kdfParams?: KdfParams | null;
   password?: string;
-}): Promise<{ blob: Blob; metadata: ShareMetadata }> {
+}): Promise<{ blob: Blob; metadata: ShareMetadata; cek: Uint8Array }> {
   let linkKey: Uint8Array;
   try {
     linkKey = fromBase64Url(input.linkKey);
@@ -151,5 +155,5 @@ export async function openEncryptedShareBlob(input: {
   });
   const metadata = await decryptMetadata(cek, input.encryptedMetadata);
   const blob = await decryptBlob(cek, input.ciphertext, metadata.type);
-  return { blob, metadata };
+  return { blob, metadata, cek };
 }

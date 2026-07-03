@@ -6,12 +6,13 @@ import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@
 import { rateLimit } from "@/lib/server/ratelimit";
 import { type RecipientRow, type ShareRow, getRecipientByLink, getShare, isExpired } from "@/lib/server/shares";
 import { CIPHERTEXT_BUCKET, pgHexToBase64Url, wispDb } from "@/lib/server/supabase";
-import { hashIp, sha256Base64Url } from "@/lib/server/tokens";
+import { generateManagementToken, hashIp, sha256Base64Url } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
 
 const SIGNED_URL_TTL_SECONDS = 60;
 const OTP_MAX_ATTEMPTS = 5;
+const SIGN_TICKET_TTL_MS = 15 * 60 * 1000;
 
 interface OtpRow {
   id: string;
@@ -163,6 +164,46 @@ export async function POST(
 
     const accessId = await logAccess(req, parentId, "view", "allowed", gate.recipient?.id);
 
+    // Document signing (policy.requireSignature): hand the verified recipient
+    // a single-use ticket for POST /sign, and give every authorized viewer
+    // the sealed envelopes so they can verify signatures locally.
+    let signing: {
+      required: boolean;
+      ticket: string | null;
+      alreadySigned: boolean;
+      envelopes: Array<{ encryptedEnvelope: string | null; signedAt: string; emailHint: string | null }>;
+    } | null = null;
+    if (share.policy.requireSignature) {
+      const db = wispDb();
+      const { data: rows, error: sigError } = await db
+        .from("signatures")
+        .select("recipient_id, encrypted_envelope, created_at, recipients(email_hint)")
+        .eq("share_id", parentId);
+      if (sigError) throw new Error(`signatures read failed: ${sigError.message}`);
+
+      const envelopes = (rows ?? []).map((row) => ({
+        encryptedEnvelope: pgHexToBase64Url(row.encrypted_envelope as string),
+        signedAt: row.created_at as string,
+        emailHint:
+          (row.recipients as unknown as { email_hint: string | null } | null)?.email_hint ?? null,
+      }));
+      const alreadySigned = (rows ?? []).some((row) => row.recipient_id === gate.recipient?.id);
+
+      let ticket: string | null = null;
+      if (gate.recipient && !alreadySigned) {
+        ticket = generateManagementToken();
+        const { error: ticketError } = await db
+          .from("recipients")
+          .update({
+            sign_ticket_hash: sha256Base64Url(ticket),
+            sign_ticket_expires_at: new Date(Date.now() + SIGN_TICKET_TTL_MS).toISOString(),
+          })
+          .eq("id", gate.recipient.id);
+        if (ticketError) throw new Error(`sign ticket update failed: ${ticketError.message}`);
+      }
+      signing = { required: true, ticket, alreadySigned, envelopes };
+    }
+
     if (share.policy.notifyEmail) {
       const who = gate.verifiedEmail ?? "someone with the link";
       void sendEmail({
@@ -181,6 +222,7 @@ export async function POST(
       kdfSalt: pgHexToBase64Url(share.kdf_salt),
       kdfParams: share.kdf_params,
       remainingViews: gate.remainingViews,
+      signing,
       viewOnly: share.policy.viewOnly,
       watermark: share.policy.watermark
         ? {
