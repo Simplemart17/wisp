@@ -11,46 +11,32 @@ import { generateManagementToken, hashIp, sha256Base64Url } from "@/lib/server/t
 export const runtime = "nodejs";
 
 const SIGNED_URL_TTL_SECONDS = 60;
-const OTP_MAX_ATTEMPTS = 5;
 const SIGN_TICKET_TTL_MS = 15 * 60 * 1000;
 
-interface OtpRow {
-  id: string;
-  code_hash: string;
-  expires_at: string;
-  attempts: number;
-  consumed: boolean;
-}
-
 /**
- * OTP verification (SPEC §8): constant-time compare against the latest live
- * code, attempt-capped, single-use. Every failure is uniform to the caller.
+ * OTP verification (SPEC §8): constant-time compare against the newest live
+ * code, attempt-capped, single-use. The attempt increment + cap check run
+ * atomically in claim_otp_attempt() so a burst of concurrent requests cannot
+ * bypass the cap. Every failure is uniform to the caller.
  */
 async function verifyOtp(shareId: string, emailHash: string, code: string): Promise<boolean> {
   const db = wispDb();
-  const { data, error } = await db
-    .from("otp_codes")
-    .select("id, code_hash, expires_at, attempts, consumed")
-    .eq("share_id", shareId)
-    .eq("email_hash", emailHash)
-    .eq("consumed", false)
-    .gt("expires_at", new Date().toISOString())
-    .lt("attempts", OTP_MAX_ATTEMPTS)
-    .order("expires_at", { ascending: false })
-    .limit(1);
-  if (error) throw new Error(`otp lookup failed: ${error.message}`);
+  // Atomically consumes one of the ≤5 attempts and returns the code hash to
+  // compare; no row means expired / none / cap reached — all "denied".
+  const { data, error } = await db.rpc("claim_otp_attempt", {
+    p_share_id: shareId,
+    p_email_hash: emailHash,
+  });
+  if (error) throw new Error(`otp claim failed: ${error.message}`);
 
-  const row = (data as OtpRow[] | null)?.[0];
+  const row = (data as Array<{ id: string; code_hash: string }> | null)?.[0];
   if (!row) return false;
 
   const presented = Buffer.from(sha256Base64Url(code), "base64url");
   const stored = Buffer.from(row.code_hash, "base64url");
   const matches = presented.length === stored.length && timingSafeEqual(presented, stored);
+  if (!matches) return false;
 
-  if (!matches) {
-    await db.from("otp_codes").update({ attempts: row.attempts + 1 }).eq("id", row.id);
-    return false;
-  }
   // Single-use: the conditional update loses gracefully on a concurrent race.
   const { data: consumed, error: consumeError } = await db
     .from("otp_codes")
@@ -68,31 +54,45 @@ interface GateResult {
   remainingViews: number | null;
 }
 
-/** Enforce identity + view limits; throws ApiError on deny (already logged). */
-async function passGates(
+/**
+ * Identity gate only (OTP): no view is consumed here, so that the irreversible
+ * consume can be deferred until AFTER the signed URL is minted — a storage
+ * hiccup then denies without burning a one-time view.
+ */
+async function verifyIdentity(
   req: Request,
   share: ShareRow,
   body: Record<string, unknown>,
-): Promise<GateResult> {
+): Promise<{ recipient: RecipientRow | null; verifiedEmail: string | null }> {
+  if (!share.policy.requireIdentity) {
+    return { recipient: null, verifiedEmail: null };
+  }
+  const recipient = await getRecipientByLink(share.id);
+  if (!recipient || recipient.revoked) {
+    throw new ApiError(404, "Not found", "gone");
+  }
+  if (!isValidEmail(body.email) || typeof body.code !== "string" || !/^\d{6}$/.test(body.code)) {
+    throw new ApiError(401, "Enter your email and the 6-digit code", "otp_required");
+  }
+  const email = normalizeEmail(body.email);
+  const allowlisted = sha256Base64Url(email) === recipient.email_hash;
+  // Verify even for non-allowlisted emails so timing stays uniform.
+  const otpOk = await verifyOtp(share.id, sha256Base64Url(email), body.code);
+  if (!allowlisted || !otpOk) {
+    await logAccess(req, share.parent_share_id ?? share.id, "otp_fail", "denied", recipient.id);
+    throw new ApiError(401, "That code didn't work — request a fresh one", "otp_invalid");
+  }
+  return { recipient, verifiedEmail: email };
+}
+
+/** Atomically consume one view; throws exhausted on deny (already logged). */
+async function consumeView(
+  req: Request,
+  share: ShareRow,
+  recipient: RecipientRow | null,
+): Promise<number | null> {
   const db = wispDb();
-
-  if (share.policy.requireIdentity) {
-    const recipient = await getRecipientByLink(share.id);
-    if (!recipient || recipient.revoked) {
-      throw new ApiError(404, "Not found", "gone");
-    }
-    if (!isValidEmail(body.email) || typeof body.code !== "string" || !/^\d{6}$/.test(body.code)) {
-      throw new ApiError(401, "Enter your email and the 6-digit code", "otp_required");
-    }
-    const email = normalizeEmail(body.email);
-    const allowlisted = sha256Base64Url(email) === recipient.email_hash;
-    // Verify even for non-allowlisted emails so timing stays uniform.
-    const otpOk = await verifyOtp(share.id, sha256Base64Url(email), body.code);
-    if (!allowlisted || !otpOk) {
-      await logAccess(req, share.parent_share_id ?? share.id, "otp_fail", "denied", recipient.id);
-      throw new ApiError(401, "That code didn't work — request a fresh one", "otp_invalid");
-    }
-
+  if (recipient) {
     const { data, error } = await db.rpc("consume_recipient_view", { p_link_id: share.id });
     if (error) throw new Error(`consume_recipient_view failed: ${error.message}`);
     if (data === null) {
@@ -104,15 +104,9 @@ async function passGates(
       .update({ verified_at: new Date().toISOString() })
       .eq("id", recipient.id)
       .is("verified_at", null);
-
-    return {
-      recipient,
-      verifiedEmail: email,
-      remainingViews: (data as number) === -1 ? null : (data as number),
-    };
+    return (data as number) === -1 ? null : (data as number);
   }
 
-  // Anonymous share: global view limit on the share row itself.
   if (share.policy.maxViews !== null) {
     const { data, error } = await db.rpc("consume_view", { p_share_id: share.id });
     if (error) throw new Error(`consume_view failed: ${error.message}`);
@@ -121,16 +115,16 @@ async function passGates(
       await logAccess(req, share.id, "view", result);
       throw new ApiError(410, "No views remain on this share", result);
     }
-    return { recipient: null, verifiedEmail: null, remainingViews: data as number };
+    return data as number;
   }
-  return { recipient: null, verifiedEmail: null, remainingViews: null };
+  return null;
 }
 
 /**
- * The gate (SPEC §8): enforce expiry, identity (OTP) and view limits
- * atomically, then release a short-lived signed URL plus the key-wrap
- * material. The password is never sent here — it only unlocks the CEK
- * client-side.
+ * The gate (SPEC §8): enforce expiry and identity (OTP), then — only once the
+ * signed URL is in hand — atomically consume a view and release the key-wrap
+ * material. Consuming last means a storage failure can't spend a one-time
+ * view. The password is never sent here; it only unlocks the CEK client-side.
  */
 export async function POST(
   req: Request,
@@ -153,7 +147,7 @@ export async function POST(
       return jsonResponse({ error: "This share has expired", kind: "expired" }, 410);
     }
 
-    const gate = await passGates(req, share, body);
+    const identity = await verifyIdentity(req, share, body);
 
     const { data: signed, error: signError } = await wispDb()
       .storage.from(CIPHERTEXT_BUCKET)
@@ -161,6 +155,10 @@ export async function POST(
     if (signError || !signed) {
       throw new Error(`createSignedUrl failed: ${signError?.message}`);
     }
+
+    // Irreversible step, deferred to the latest safe moment.
+    const remainingViews = await consumeView(req, share, identity.recipient);
+    const gate: GateResult = { ...identity, remainingViews };
 
     const accessId = await logAccess(req, parentId, "view", "allowed", gate.recipient?.id);
 

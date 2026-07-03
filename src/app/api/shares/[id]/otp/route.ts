@@ -42,7 +42,18 @@ export async function POST(
     if (sha256Base64Url(email) !== recipient.email_hash) return uniform();
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
-    const { error } = await wispDb().from("otp_codes").insert({
+    const db = wispDb();
+    // Retire any earlier live codes for this recipient so exactly one is valid
+    // at a time — otherwise verifyOtp (which checks only the newest) would
+    // silently disable a code the recipient may still be about to enter.
+    await db
+      .from("otp_codes")
+      .update({ consumed: true })
+      .eq("share_id", id)
+      .eq("email_hash", recipient.email_hash)
+      .eq("consumed", false);
+
+    const { error } = await db.from("otp_codes").insert({
       share_id: id,
       email_hash: recipient.email_hash,
       code_hash: sha256Base64Url(code),
