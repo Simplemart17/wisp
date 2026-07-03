@@ -89,7 +89,8 @@ Point it at any Supabase project — hosted or
 | `SUPABASE_SECRET_KEY` | yes | `sb_secret_…` key — server-side only |
 | `RESEND_API_KEY` | no | Real email delivery (console log otherwise) |
 | `WISP_EMAIL_FROM` | no | From address for outgoing mail |
-| `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log |
+| `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log (random per-process if unset) |
+| `WISP_TRUSTED_PROXY_DEPTH` | recommended | Trusted reverse-proxy count for spoof-resistant client IP (default 1) |
 | `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` (expiry cleanup via pg_cron) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | no | Enables optional sender accounts + "My shares" dashboard |
 | `CLERK_SECRET_KEY` | no | Server side of the Clerk integration |
