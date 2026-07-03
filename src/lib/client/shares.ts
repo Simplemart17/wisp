@@ -3,12 +3,13 @@
  * the API only ever sees ciphertext, wrap records and policy.
  */
 import { type KdfParams, type ShareMetadata, fromBase64Url, toBase64Url } from "@/lib/crypto";
+import type { ErrorKind } from "@/lib/shared/errors";
 import { createEncryptedShareFromBlob, openEncryptedShareBlob } from "./stream-crypto";
 
 export class ShareApiError extends Error {
   constructor(
     public readonly status: number,
-    public readonly kind: string | null,
+    public readonly kind: ErrorKind | null,
     message: string,
   ) {
     super(message);
@@ -20,9 +21,9 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
-    let kind: string | null = null;
+    let kind: ErrorKind | null = null;
     try {
-      const body = (await res.json()) as { error?: string; kind?: string | null };
+      const body = (await res.json()) as { error?: string; kind?: ErrorKind | null };
       if (body.error) message = body.error;
       kind = body.kind ?? null;
     } catch {
