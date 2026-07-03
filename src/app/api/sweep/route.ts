@@ -18,9 +18,13 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const db = wispDb();
+    // Stale OTP codes have no blob to clean — delete directly.
+    await db.from("otp_codes").delete().lt("expires_at", new Date(Date.now() - 3600_000).toISOString());
+
     const { data, error } = await db
       .from("shares")
       .select("id, ciphertext_ref")
+      .is("parent_share_id", null) // children share the parent's blob + cascade
       .or(`expires_at.lt.${new Date().toISOString()},policy->>maxViews.eq.0`)
       .limit(500);
     if (error) throw new Error(`sweep query failed: ${error.message}`);
