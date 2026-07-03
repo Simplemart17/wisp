@@ -1,6 +1,5 @@
-import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
-import { getShare, requireManagementAccess } from "@/lib/server/shares";
+import { enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
+import { getManageableParent, requireManagementAccess } from "@/lib/server/shares";
 import { CIPHERTEXT_BUCKET, wispDb } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -17,15 +16,9 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    if (!rateLimit(`revoke:${clientIp(req)}`, 10, 60 * 1000)) {
-      throw new ApiError(429, "Too many attempts, slow down");
-    }
+    enforceRateLimit(req, "revoke", 10, 60 * 1000);
 
-    const share = await getShare(id);
-    if (!share || share.parent_share_id !== null) {
-      // Child ids are not directly manageable — the parent's manage link is.
-      return jsonResponse({ error: "Not found", kind: "gone" }, 404);
-    }
+    const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
 
     const body = await readJsonBody(req).catch(() => ({}) as Record<string, unknown>);

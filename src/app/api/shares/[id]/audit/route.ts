@@ -1,6 +1,5 @@
-import { ApiError, clientIp, errorResponse, jsonResponse } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
-import { getShare, isExhausted, isExpired, requireManagementAccess } from "@/lib/server/shares";
+import { enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
+import { getManageableParent, isExhausted, isExpired, requireManagementAccess } from "@/lib/server/shares";
 import { wispDb } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -16,14 +15,9 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    if (!rateLimit(`audit:${clientIp(req)}`, 30, 60 * 1000)) {
-      throw new ApiError(429, "Too many attempts, slow down");
-    }
+    enforceRateLimit(req, "audit", 30, 60 * 1000);
 
-    const share = await getShare(id);
-    if (!share || share.parent_share_id !== null) {
-      return jsonResponse({ error: "Not found", kind: "gone" }, 404);
-    }
+    const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
 
     const db = wispDb();
