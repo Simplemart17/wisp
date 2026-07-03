@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --paper: #f5f8f6;
+  --pane: #eef2f0;
+  --ink: #16211e;
+  --faded: #5c6b66;
+  --mist: #d8e0dc;
+  --verdigris: #206b58;
+  --verdigris-deep: #14483a;
+  --wax: #a34324;
+  --wax-deep: #7c2f16;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-pane: var(--pane);
+  --color-ink: var(--ink);
+  --color-faded: var(--faded);
+  --color-mist: var(--mist);
+  --color-verdigris: var(--verdigris);
+  --color-verdigris-deep: var(--verdigris-deep);
+  --color-wax: var(--wax);
+  --color-wax-deep: var(--wax-deep);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* The unfog reveal — the one orchestrated moment in the app. */
+@keyframes unfog {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.unfog {
+  animation: unfog 0.7s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unfog {
+    animation: none;
+  }
+}
