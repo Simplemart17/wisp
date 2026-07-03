@@ -32,8 +32,17 @@ function withPassword(): Record<string, unknown> {
 describe("parseCreateShare", () => {
   it("accepts a minimal passwordless share", () => {
     const parsed = parseCreateShare(validBody());
-    expect(parsed.policy).toEqual({ expiresIn: "7d", maxViews: 3, password: false });
+    expect(parsed.policy).toEqual({
+      expiresIn: "7d",
+      maxViews: 3,
+      password: false,
+      requireIdentity: false,
+      viewOnly: false,
+      watermark: false,
+      notifyEmail: null,
+    });
     expect(parsed.wrappedCek).toBeNull();
+    expect(parsed.recipients).toEqual([]);
     expect(parsed.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
@@ -49,7 +58,48 @@ describe("parseCreateShare", () => {
     expect(parseCreateShare(body).policy.maxViews).toBeNull();
   });
 
+  it("normalizes and deduplicates identity recipients", () => {
+    const body = {
+      ...validBody(),
+      policy: { expiresIn: "7d", maxViews: 1, requireIdentity: true },
+      recipients: ["Jane@X.com ", "jane@x.com", "sam@y.org"],
+    };
+    const parsed = parseCreateShare(body);
+    expect(parsed.policy.requireIdentity).toBe(true);
+    expect(parsed.recipients).toEqual(["jane@x.com", "sam@y.org"]);
+  });
+
+  it("accepts view-only, watermark and notify options", () => {
+    const body = {
+      ...validBody(),
+      policy: {
+        expiresIn: "24h",
+        maxViews: null,
+        viewOnly: true,
+        watermark: true,
+        notifyEmail: "Sender@Me.io",
+      },
+    };
+    const parsed = parseCreateShare(body);
+    expect(parsed.policy).toMatchObject({
+      viewOnly: true,
+      watermark: true,
+      notifyEmail: "sender@me.io",
+    });
+  });
+
   it.each([
+    ["identity without recipients", { policy: { expiresIn: "7d", requireIdentity: true } }],
+    ["identity with a bad email", {
+      policy: { expiresIn: "7d", requireIdentity: true },
+      recipients: ["not-an-email"],
+    }],
+    ["too many recipients", {
+      policy: { expiresIn: "7d", requireIdentity: true },
+      recipients: Array.from({ length: 21 }, (_, i) => `user${i}@x.com`),
+    }],
+    ["bad notify email", { policy: { expiresIn: "7d", notifyEmail: "nope" } }],
+    ["non-boolean viewOnly", { policy: { expiresIn: "7d", viewOnly: "yes" } }],
     ["foreign blob path", { ciphertextRef: "../../etc/passwd" }],
     ["wrong-length wrappedCek", { ...withPassword(), wrappedCek: b64(59) }],
     ["wrap without salt+params", { ...validBody(), wrappedCek: b64(60) }],

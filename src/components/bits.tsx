@@ -6,11 +6,12 @@ import { useState } from "react";
  * Honesty chips (SPEC §1): every control is labeled with the tier that
  * actually guarantees it, so the UI never promises more than it delivers.
  */
-export function TierChip({ tier }: { tier: "encrypted" | "server-enforced" }) {
-  const styles =
-    tier === "encrypted"
-      ? "border-verdigris/40 text-verdigris"
-      : "border-mist text-faded";
+export function TierChip({ tier }: { tier: "encrypted" | "server-enforced" | "client-honored" }) {
+  const styles = {
+    encrypted: "border-verdigris/40 text-verdigris",
+    "server-enforced": "border-mist text-faded",
+    "client-honored": "border-wax/30 text-wax",
+  }[tier];
   return (
     <span
       className={`rounded-sm border px-1.5 py-px font-mono text-[10px] uppercase tracking-wider ${styles}`}

@@ -47,6 +47,20 @@ export function ManageShare({ id }: { id: string }) {
     }
   }
 
+  async function revokeRecipient(linkId: string) {
+    if (phase.name !== "loaded") return;
+    try {
+      await revokeShare(id, tokenRef.current, linkId);
+      const report = await fetchAudit(id, tokenRef.current);
+      setPhase({ name: "loaded", report, confirming: false, revoking: false });
+    } catch (err) {
+      setPhase({
+        name: "error",
+        message: err instanceof Error ? err.message : "Revoking the recipient failed.",
+      });
+    }
+  }
+
   if (phase.name === "loading") {
     return <p className="font-mono text-sm text-faded">Opening the ledger…</p>;
   }
@@ -116,6 +130,56 @@ export function ManageShare({ id }: { id: string }) {
         </div>
       </dl>
 
+      {s.requiresIdentity && report.recipients.length > 0 ? (
+        <div>
+          <h2 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-faded">
+            Recipients
+          </h2>
+          <div className="overflow-x-auto rounded-sm border border-mist bg-white/60">
+            <table className="w-full font-mono text-xs">
+              <thead>
+                <tr className="border-b border-mist text-left text-[10px] uppercase tracking-widest text-faded">
+                  <th className="px-3 py-2 font-normal">recipient</th>
+                  <th className="px-3 py-2 font-normal">views left</th>
+                  <th className="px-3 py-2 font-normal">verified</th>
+                  <th className="px-3 py-2 font-normal" />
+                </tr>
+              </thead>
+              <tbody>
+                {report.recipients.map((r) => (
+                  <tr key={r.link_id} className="border-b border-mist/60 last:border-0">
+                    <td className="px-3 py-2">{r.email_hint ?? r.link_id}</td>
+                    <td className="px-3 py-2">
+                      {r.revoked ? (
+                        <span className="text-wax">revoked</span>
+                      ) : r.views_remaining === null ? (
+                        "unlimited"
+                      ) : (
+                        r.views_remaining
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-faded">
+                      {r.verified_at ? new Date(r.verified_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {!r.revoked ? (
+                        <button
+                          type="button"
+                          onClick={() => void revokeRecipient(r.link_id)}
+                          className="text-wax hover:underline"
+                        >
+                          revoke link
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
       <div>
         <h2 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-faded">
           Access log
@@ -144,7 +208,7 @@ export function ManageShare({ id }: { id: string }) {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-faded" title={entry.user_agent ?? undefined}>
-                      {entry.ip_hash ?? "—"}
+                      {entry.recipients?.email_hint ?? entry.ip_hash ?? "—"}
                     </td>
                   </tr>
                 ))}
