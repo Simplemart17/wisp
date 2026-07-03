@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wisp
 
-## Getting Started
+**Zero-knowledge sharing for sensitive documents and messages.** The sender's
+browser encrypts content *before* upload; the server only ever stores
+ciphertext; the recipient decrypts locally. The decryption key lives in the
+URL fragment (`/s/<id>#<key>`), which browsers never transmit to any server.
 
-First, run the development server:
+Full design: [SPEC.md](SPEC.md).
+
+## Features
+
+- **End-to-end encryption** — AES-256-GCM in STREAM-style chunks (large files
+  never sit in memory), keys derived and used only in the browser.
+- **Password protection** (cryptographic) — Argon2id-wrapped key; a leaked
+  link alone is useless.
+- **Expiry, view limits, burn-after-read** (server-enforced) — atomic view
+  consumption; a "click to reveal" interstitial keeps link-preview bots from
+  silently burning one-time views.
+- **Recipient identity** (server-enforced) — per-recipient links + email OTP
+  (hashed codes, attempt caps, no-enumeration responses); every open is
+  logged against a verified identity.
+- **View-only + watermark** (client-honored, honestly labeled) — content
+  renders only to `<canvas>`; a visible identity tile plus an invisible
+  DCT forensic mark are burned into the pixels. Trace leaks at `/decode`.
+- **Revoke & audit** — anonymous senders get a one-time management link;
+  hard-delete the blob, or revoke a single recipient.
+- **Notify-on-open**, abuse reporting, hashed IPs everywhere, nonce-based CSP,
+  `Referrer-Policy: no-referrer` (fragment hygiene).
+
+## Stack
+
+Next.js (App Router) · Supabase (Postgres `wisp` schema + private Storage) ·
+Resend (email, optional) · hash-wasm (Argon2id) · PDF.js · pdf-lib.
+
+Uses Supabase's **new API keys**: the server authenticates with the secret key
+(`sb_secret_…`); the browser ships **no** Supabase key at all (signed URLs
+only). Legacy `anon`/`service_role` JWTs are not used.
+
+## Local development
+
+Prereqs: Node 20+, pnpm, Docker, [Supabase CLI](https://supabase.com/docs/guides/cli).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+supabase start          # local Postgres + Storage; applies supabase/migrations
+pnpm dev                # uses .env.development.local → local stack
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Emails (OTP codes, share links) print to the dev-server console unless
+`RESEND_API_KEY` is set.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm test               # vitest — crypto core, policy, forensic watermark
+pnpm typecheck && pnpm lint && pnpm build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Hosted deployment (Vercel + Supabase)
 
-## Learn More
+1. Create a Supabase project. Apply the schema:
+   `supabase link --project-ref <ref> && supabase db push`
+   (or paste `supabase/migrations/*.sql` into the SQL editor, in order).
+2. Dashboard → **Settings → Data API → Exposed schemas**: add `wisp`.
+3. Create the private Storage bucket `wisp` (or let the app's first upload
+   fail and create it by hand — private, ~50 MiB file limit on free tier).
+4. Deploy to Vercel with the env vars below.
 
-To learn more about Next.js, take a look at the following resources:
+## Self-hosting
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker build -t wisp .
+docker run -p 3000:3000 \
+  -e SUPABASE_URL=... -e SUPABASE_SECRET_KEY=... \
+  -e WISP_IP_SALT=$(openssl rand -hex 16) wisp
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Point it at any Supabase project — hosted or
+[self-hosted Supabase](https://supabase.com/docs/guides/self-hosting).
 
-## Deploy on Vercel
+## Environment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable | Required | Purpose |
+|---|---|---|
+| `SUPABASE_URL` | yes | Project URL |
+| `SUPABASE_SECRET_KEY` | yes | `sb_secret_…` key — server-side only |
+| `RESEND_API_KEY` | no | Real email delivery (console log otherwise) |
+| `WISP_EMAIL_FROM` | no | From address for outgoing mail |
+| `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log |
+| `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` (expiry cleanup via pg_cron) |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Honest limits (read SPEC §2)
+
+Once someone can *see* content they can copy it — view-only and watermarks are
+**traceability and deterrence**, not prevention. Browser-delivered E2E means a
+malicious server could ship key-stealing JS; self-hosting and CSP shrink, but
+don't eliminate, that trust. The forensic watermark v1 survives re-encoding
+and noise, not cropping/scaling/photographing a screen.
