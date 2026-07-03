@@ -52,8 +52,8 @@ export function renderTextToCanvas(text: string, width = RENDER_WIDTH): HTMLCanv
   return canvas;
 }
 
-export async function renderImageToCanvas(data: Uint8Array, type: string): Promise<HTMLCanvasElement> {
-  const bitmap = await createImageBitmap(new Blob([data as BlobPart], { type }));
+export async function renderImageToCanvas(source: Blob): Promise<HTMLCanvasElement> {
+  const bitmap = await createImageBitmap(source);
   const canvas = document.createElement("canvas");
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;

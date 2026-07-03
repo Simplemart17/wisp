@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 /** Private bucket holding ciphertext blobs, released only via signed URLs. */
 export const CIPHERTEXT_BUCKET = "wisp";
 
-export const MAX_CIPHERTEXT_BYTES = 32 * 1024 * 1024; // ciphertext incl. chunk overhead
+export const MAX_CIPHERTEXT_BYTES = 128 * 1024 * 1024; // ciphertext incl. chunk overhead
 export const MAX_ENCRYPTED_METADATA_BYTES = 4096;
 
 function createWispClient(url: string, secretKey: string) {

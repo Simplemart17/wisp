@@ -408,4 +408,4 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Private ciphertext bucket, mirrored from the hosted project (SPEC §6).
 [storage.buckets.wisp]
 public = false
-file_size_limit = "32MiB"
+file_size_limit = "128MiB"

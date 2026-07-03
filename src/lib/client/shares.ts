@@ -2,14 +2,8 @@
  * Browser-side share flows: all crypto happens here (via the crypto core);
  * the API only ever sees ciphertext, wrap records and policy.
  */
-import {
-  type KdfParams,
-  type ShareMetadata,
-  createEncryptedShare,
-  fromBase64Url,
-  openEncryptedShare,
-  toBase64Url,
-} from "@/lib/crypto";
+import { type KdfParams, type ShareMetadata, fromBase64Url, toBase64Url } from "@/lib/crypto";
+import { createEncryptedShareFromBlob, openEncryptedShareBlob } from "./stream-crypto";
 
 export class ShareApiError extends Error {
   constructor(
@@ -50,7 +44,8 @@ function postJson<T>(url: string, body: unknown, headers?: Record<string, string
 export type CreateStep = "encrypting" | "uploading" | "registering" | "notifying";
 
 export interface CreateShareOptions {
-  data: Uint8Array;
+  /** File/Blob sources are encrypted chunk-by-chunk — never fully in memory. */
+  data: Uint8Array | Blob;
   metadata: ShareMetadata;
   password?: string;
   expiresIn: string;
@@ -81,20 +76,22 @@ export interface ShareReceipt {
 
 export async function createShareFlow(options: CreateShareOptions): Promise<ShareReceipt> {
   options.onStep?.("encrypting");
-  const encrypted = await createEncryptedShare({
-    data: options.data,
+  const source =
+    options.data instanceof Blob ? options.data : new Blob([options.data as BlobPart]);
+  const encrypted = await createEncryptedShareFromBlob({
+    source,
     metadata: options.metadata,
     password: options.password || undefined,
   });
 
   options.onStep?.("uploading");
   const upload = await postJson<{ path: string; url: string }>("/api/uploads", {
-    size: encrypted.ciphertext.length,
+    size: encrypted.ciphertext.size,
   });
   const put = await fetch(upload.url, {
     method: "PUT",
     headers: { "content-type": "application/octet-stream" },
-    body: encrypted.ciphertext as unknown as BodyInit,
+    body: encrypted.ciphertext,
   });
   if (!put.ok) {
     throw new ShareApiError(put.status, null, "Uploading the encrypted content failed");
@@ -176,7 +173,7 @@ export interface WatermarkPayload {
  * mistyped password can be retried WITHOUT consuming another view.
  */
 export interface AccessedShare {
-  ciphertext: Uint8Array;
+  ciphertext: Blob;
   encryptedMetadata: Uint8Array;
   wrappedCek: Uint8Array | null;
   kdfSalt: Uint8Array | null;
@@ -208,7 +205,7 @@ export async function accessShare(id: string, credentials?: AccessCredentials): 
     throw new ShareApiError(blobRes.status, null, "Downloading the encrypted content failed");
   }
   return {
-    ciphertext: new Uint8Array(await blobRes.arrayBuffer()),
+    ciphertext: await blobRes.blob(),
     encryptedMetadata: fromBase64Url(payload.encryptedMetadata),
     wrappedCek: payload.wrappedCek ? fromBase64Url(payload.wrappedCek) : null,
     kdfSalt: payload.kdfSalt ? fromBase64Url(payload.kdfSalt) : null,
@@ -220,7 +217,8 @@ export async function accessShare(id: string, credentials?: AccessCredentials): 
 }
 
 export interface OpenedShare {
-  data: Uint8Array;
+  /** Decrypted content as a typed Blob (never one giant contiguous buffer). */
+  blob: Blob;
   metadata: ShareMetadata;
 }
 
@@ -230,7 +228,7 @@ export function decryptAccessedShare(
   linkKey: string,
   password?: string,
 ): Promise<OpenedShare> {
-  return openEncryptedShare({
+  return openEncryptedShareBlob({
     linkKey,
     ciphertext: accessed.ciphertext,
     encryptedMetadata: accessed.encryptedMetadata,
