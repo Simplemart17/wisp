@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 
 import { AuthCorner } from "@/components/auth-corner";
+import { env } from "@/lib/server/env";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // Sender accounts are optional (SPEC §5b): without Clerk keys the app runs
   // management-token-only and no Clerk code is rendered at all.
-  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const clerkEnabled = Boolean(env.clerkPublishableKey);
   // Under strict-dynamic CSP, Clerk's hot-loaded script must carry the nonce.
   const nonce = clerkEnabled ? ((await headers()).get("x-nonce") ?? undefined) : undefined;
 

@@ -1,3 +1,4 @@
+import { env } from "@/lib/server/env";
 import { errorResponse, jsonResponse } from "@/lib/server/http";
 import { CIPHERTEXT_BUCKET, wispDb } from "@/lib/server/supabase";
 import { sha256Base64Url, tokenMatchesHash } from "@/lib/server/tokens";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    const secret = process.env.WISP_SWEEP_SECRET;
+    const secret = env.sweepSecret;
     const presented = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     if (!secret || !presented || !tokenMatchesHash(presented, sha256Base64Url(secret))) {
       return jsonResponse({ error: "Not found", kind: null }, 404);

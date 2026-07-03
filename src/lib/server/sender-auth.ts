@@ -6,10 +6,10 @@
  */
 import { auth } from "@clerk/nextjs/server";
 
+import { env } from "./env";
+
 export function clerkEnabled(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
-  );
+  return env.clerkEnabled;
 }
 
 /** Signed-in sender's Clerk user id, or null (signed out / Clerk disabled). */

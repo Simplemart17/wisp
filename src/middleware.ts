@@ -1,6 +1,8 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { env } from "@/lib/server/env";
+
 /**
  * Two jobs, one middleware:
  *
@@ -12,7 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
  *    degrades to the plain CSP middleware.
  */
 
-const CLERK_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const CLERK_PUBLISHABLE_KEY = env.clerkPublishableKey;
 
 /** `pk_test_<base64 of "slug.clerk.accounts.dev$">` → that frontend origin. */
 function clerkFrontendOrigin(): string {
@@ -34,7 +36,7 @@ function applyCsp(request: NextRequest): NextResponse {
 
   const supabaseOrigin = (() => {
     try {
-      return new URL(process.env.SUPABASE_URL ?? "").origin;
+      return new URL(env.supabaseUrl ?? "").origin;
     } catch {
       return "";
     }
@@ -42,7 +44,7 @@ function applyCsp(request: NextRequest): NextResponse {
   const clerkOrigin = clerkFrontendOrigin();
 
   // Dev tooling (HMR, source maps) needs eval; never allowed in production.
-  const devEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
+  const devEval = env.isDev ? " 'unsafe-eval'" : "";
 
   const csp = [
     `default-src 'self'`,
