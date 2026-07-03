@@ -37,6 +37,7 @@ describe("parseCreateShare", () => {
       maxViews: 3,
       password: false,
       requireIdentity: false,
+      requireSignature: false,
       viewOnly: false,
       watermark: false,
       notifyEmail: null,
@@ -89,6 +90,7 @@ describe("parseCreateShare", () => {
   });
 
   it.each([
+    ["signature without identity", { policy: { expiresIn: "7d", requireSignature: true } }],
     ["identity without recipients", { policy: { expiresIn: "7d", requireIdentity: true } }],
     ["identity with a bad email", {
       policy: { expiresIn: "7d", requireIdentity: true },
