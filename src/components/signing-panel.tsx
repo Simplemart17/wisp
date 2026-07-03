@@ -121,7 +121,7 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
     <div className="space-y-4 rounded-sm border border-verdigris/30 bg-verdigris/5 p-4">
       <h2 className="flex items-baseline justify-between">
         <span className="text-sm font-medium">Signatures</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-faded">
+        <span className="font-mono text-[10px] tracking-tight text-faded">
           verified in your browser
         </span>
       </h2>
@@ -170,7 +170,7 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Jane Q. Signer"
-              className="w-full rounded-sm border border-mist bg-white/60 px-3 py-2 font-display text-lg italic placeholder:not-italic placeholder:font-sans placeholder:text-sm placeholder:text-faded/60 focus:border-verdigris focus:outline-none"
+              className="w-full rounded-sm border border-mist bg-card px-3 py-2.5 font-display text-lg tracking-tight placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-hush focus:border-verdigris focus:outline-none"
             />
           </label>
           {phase.name === "error" ? <Notice tone="error">{phase.message}</Notice> : null}
@@ -178,7 +178,7 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
             type="button"
             onClick={() => void sign()}
             disabled={name.trim().length < 2 || phase.name === "working"}
-            className="w-full rounded-sm bg-verdigris px-4 py-2.5 text-sm font-medium text-white hover:bg-verdigris-deep disabled:opacity-60"
+            className="w-full rounded-sm bg-ink px-4 py-2.5 text-sm font-medium text-paper hover:bg-verdigris-deep disabled:opacity-60"
           >
             {phase.name === "working" ? "Signing…" : "Sign this document"}
           </button>

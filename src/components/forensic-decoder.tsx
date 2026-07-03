@@ -47,7 +47,7 @@ export function ForensicDecoder() {
         </p>
       </div>
 
-      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-sm border border-dashed border-mist bg-white/60 px-4 py-10 text-sm text-faded hover:border-verdigris">
+      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-sm border border-dashed border-mist bg-card px-4 py-10 text-sm text-faded hover:border-verdigris">
         <input
           type="file"
           accept="image/*"

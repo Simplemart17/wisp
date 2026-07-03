@@ -44,7 +44,7 @@ export function Dashboard() {
         <SignInButton mode="modal">
           <button
             type="button"
-            className="mt-4 rounded-sm bg-verdigris px-4 py-2.5 text-sm font-medium text-white hover:bg-verdigris-deep"
+            className="mt-4 rounded-sm bg-ink px-4 py-2.5 text-sm font-medium text-paper hover:bg-verdigris-deep"
           >
             Sign in
           </button>
@@ -94,7 +94,7 @@ function ShareList() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-sm border border-mist bg-white/60">
+    <div className="overflow-x-auto rounded-sm border border-mist bg-card">
       <table className="w-full font-mono text-xs">
         <thead>
           <tr className="border-b border-mist text-left text-[10px] uppercase tracking-widest text-faded">

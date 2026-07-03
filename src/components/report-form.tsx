@@ -55,7 +55,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-sm border border-mist bg-white/60 px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
+            className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
           >
             {REASONS.map((r) => (
               <option key={r.value} value={r.value}>
@@ -74,7 +74,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
             onChange={(e) => setDetails(e.target.value)}
             rows={4}
             maxLength={2000}
-            className="w-full rounded-sm border border-mist bg-white/60 p-3 text-sm focus:border-verdigris focus:outline-none"
+            className="w-full rounded-sm border border-mist bg-card p-3 text-sm focus:border-verdigris focus:outline-none"
           />
         </label>
 
@@ -83,7 +83,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
         <button
           type="submit"
           disabled={state === "sending"}
-          className="rounded-sm bg-verdigris px-4 py-2.5 text-sm font-medium text-white hover:bg-verdigris-deep disabled:opacity-60"
+          className="rounded-sm bg-ink px-4 py-2.5 text-sm font-medium text-paper hover:bg-verdigris-deep disabled:opacity-60"
         >
           {state === "sending" ? "Sending…" : "Send report"}
         </button>

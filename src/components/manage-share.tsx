@@ -112,7 +112,7 @@ export function ManageShare({ id }: { id: string }) {
         <p className="mt-1 font-mono text-xs text-faded">{s.id}</p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-sm border border-mist bg-white/60 p-4 text-sm sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-sm border border-mist bg-card p-4 text-sm sm:grid-cols-4">
         <div>
           <dt className="font-mono text-[10px] uppercase tracking-widest text-faded">status</dt>
           <dd className={status === "active" ? "text-verdigris" : "text-wax"}>{status}</dd>
@@ -144,7 +144,7 @@ export function ManageShare({ id }: { id: string }) {
           <h2 className="mb-2 font-mono text-[11px] uppercase tracking-widest text-faded">
             Recipients
           </h2>
-          <div className="overflow-x-auto rounded-sm border border-mist bg-white/60">
+          <div className="overflow-x-auto rounded-sm border border-mist bg-card">
             <table className="w-full font-mono text-xs">
               <thead>
                 <tr className="border-b border-mist text-left text-[10px] uppercase tracking-widest text-faded">
@@ -210,7 +210,7 @@ export function ManageShare({ id }: { id: string }) {
             No one has opened this share yet.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-sm border border-mist bg-white/60">
+          <div className="overflow-x-auto rounded-sm border border-mist bg-card">
             <table className="w-full font-mono text-xs">
               <thead>
                 <tr className="border-b border-mist text-left text-[10px] uppercase tracking-widest text-faded">
