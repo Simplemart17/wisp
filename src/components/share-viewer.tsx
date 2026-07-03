@@ -12,7 +12,6 @@ import {
   requestOtp,
 } from "@/lib/client/shares";
 import { WispCryptoError, type ShareMetadata } from "@/lib/crypto";
-import { utf8Decode } from "@/lib/crypto/encoding";
 import {
   applyVisibleWatermark,
   renderImageToCanvas,
@@ -20,6 +19,8 @@ import {
   renderTextToCanvas,
   watermarkLines,
 } from "@/lib/client/render/canvas";
+import { burnForDownload } from "@/lib/client/render/burn";
+import { embedForensic } from "@/lib/client/render/forensic";
 import { Notice, formatBytes } from "./bits";
 
 interface GateState {
@@ -38,7 +39,7 @@ type Phase =
   | { name: "working"; label: string }
   | {
       name: "open";
-      data: Uint8Array;
+      blob: Blob;
       metadata: ShareMetadata;
       remainingViews: number | null;
       viewOnly: boolean;
@@ -292,11 +293,12 @@ export function ShareViewer({ id }: { id: string }) {
 
   return (
     <OpenedView
-      data={phase.data}
+      blob={phase.blob}
       metadata={phase.metadata}
       remainingViews={phase.remainingViews}
       viewOnly={phase.viewOnly}
       watermark={phase.watermark}
+      shareId={id}
     />
   );
 }
@@ -306,22 +308,26 @@ function canRenderToCanvas(type: string): boolean {
 }
 
 function OpenedView({
-  data,
+  blob,
   metadata,
   remainingViews,
   viewOnly,
   watermark,
+  shareId,
 }: {
-  data: Uint8Array;
+  blob: Blob;
   metadata: ShareMetadata;
   remainingViews: number | null;
   viewOnly: boolean;
   watermark: WatermarkPayload | null;
+  shareId: string;
 }) {
   const renderable = canRenderToCanvas(metadata.type);
+  const playable = metadata.type.startsWith("audio/") || metadata.type.startsWith("video/");
   const useCanvas = renderable && (viewOnly || watermark !== null);
   const canvasHost = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!useCanvas || !canvasHost.current) return;
@@ -331,15 +337,23 @@ function OpenedView({
     (async () => {
       let canvases: HTMLCanvasElement[];
       if (metadata.type === "application/pdf") {
-        canvases = await renderPdfToCanvases(data);
+        canvases = await renderPdfToCanvases(new Uint8Array(await blob.arrayBuffer()));
       } else if (metadata.type.startsWith("image/")) {
-        canvases = [await renderImageToCanvas(data, metadata.type)];
+        canvases = [await renderImageToCanvas(blob)];
       } else {
-        canvases = [renderTextToCanvas(utf8Decode(data))];
+        canvases = [renderTextToCanvas(await blob.text())];
       }
       if (cancelled) return;
       for (const canvas of canvases) {
-        if (watermark) applyVisibleWatermark(canvas, watermarkLines(watermark));
+        if (watermark) {
+          applyVisibleWatermark(canvas, watermarkLines(watermark));
+          if (watermark.accessId !== null && canvas.width * canvas.height <= 4_000_000) {
+            // Invisible forensic layer: the access id, recoverable from leaks.
+            const ctx = canvas.getContext("2d")!;
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (embedForensic(imageData, watermark.accessId)) ctx.putImageData(imageData, 0, 0);
+          }
+        }
         canvas.className = "block w-full h-auto border border-mist rounded-sm bg-white";
         host.appendChild(canvas);
       }
@@ -351,19 +365,26 @@ function OpenedView({
       cancelled = true;
       host.replaceChildren();
     };
-  }, [useCanvas, data, metadata.type, watermark]);
+  }, [useCanvas, blob, metadata.type, watermark]);
 
-  function download() {
-    const url = URL.createObjectURL(new Blob([data as BlobPart], { type: metadata.type }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = metadata.name;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function download() {
+    setDownloading(true);
+    try {
+      // When downloads are allowed AND a watermark is required, burn it into
+      // the copy (images + PDFs) before handing the bytes over.
+      const out = watermark
+        ? await burnForDownload(blob, metadata, watermark)
+        : { blob, name: metadata.name, burned: false };
+      const url = URL.createObjectURL(out.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = out.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
   }
-
-  const isText = metadata.type.startsWith("text/");
-  const isImage = metadata.type.startsWith("image/");
 
   return (
     <section className="unfog space-y-4">
@@ -380,12 +401,17 @@ function OpenedView({
           onContextMenu={(e) => viewOnly && e.preventDefault()}
           className={`max-h-[70vh] space-y-3 overflow-auto ${viewOnly ? "select-none" : ""}`}
         />
-      ) : isText ? (
-        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-sm border border-mist bg-white/60 p-4 font-mono text-sm leading-relaxed">
-          {utf8Decode(data)}
-        </pre>
-      ) : isImage ? (
-        <PlainImage data={data} type={metadata.type} name={metadata.name} />
+      ) : metadata.type.startsWith("text/") ? (
+        <TextBlock blob={blob} />
+      ) : metadata.type.startsWith("image/") ? (
+        <MediaView blob={blob} type={metadata.type} name={metadata.name} kind="image" />
+      ) : playable ? (
+        <MediaView
+          blob={blob}
+          type={metadata.type}
+          name={metadata.name}
+          kind={metadata.type.startsWith("audio/") ? "audio" : "video"}
+        />
       ) : (
         <div className="rounded-sm border border-mist bg-pane p-6 text-center text-sm text-faded">
           This file type can&apos;t be previewed here — download it to open it.
@@ -395,16 +421,17 @@ function OpenedView({
       <div className="flex items-center justify-between gap-4">
         {viewOnly ? (
           <span className="text-xs text-faded">
-            View-only: rendered to pixels, no download offered. (This deters saving — it cannot
-            stop screenshots.)
+            View-only: rendered {playable ? "for playback" : "to pixels"}, no download offered.
+            (This deters saving — it cannot stop screenshots or recordings.)
           </span>
         ) : (
           <button
             type="button"
-            onClick={download}
-            className="rounded-sm border border-mist px-4 py-2 text-sm hover:border-verdigris hover:text-verdigris"
+            onClick={() => void download()}
+            disabled={downloading}
+            className="rounded-sm border border-mist px-4 py-2 text-sm hover:border-verdigris hover:text-verdigris disabled:opacity-60"
           >
-            Download
+            {downloading ? "Preparing…" : watermark ? "Download watermarked copy" : "Download"}
           </button>
         )}
         {remainingViews !== null ? (
@@ -418,23 +445,58 @@ function OpenedView({
 
       {watermark ? (
         <p className="text-xs leading-relaxed text-faded">
-          This rendering is watermarked to {watermark.email ?? "this link"} — visible marks are
-          burned into the pixels, so copies stay traceable.
+          This rendering is watermarked to {watermark.email ?? "this link"} — a visible tile plus
+          an invisible forensic mark are burned into the pixels, so copies stay traceable.
         </p>
       ) : null}
       <p className="text-xs leading-relaxed text-faded">
-        Decrypted locally — the plaintext never left your browser&apos;s memory.
+        Decrypted locally — the plaintext never left your browser&apos;s memory.{" "}
+        <a href={`/report?share=${shareId}`} className="underline hover:text-ink">
+          Report abuse
+        </a>
       </p>
     </section>
   );
 }
 
-function PlainImage({ data, type, name }: { data: Uint8Array; type: string; name: string }) {
-  const url = useMemo(
-    () => URL.createObjectURL(new Blob([data as BlobPart], { type })),
-    [data, type],
+function TextBlock({ blob }: { blob: Blob }) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    blob.text().then((t) => {
+      if (!cancelled) setText(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blob]);
+  if (text === null) return null;
+  return (
+    <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-sm border border-mist bg-white/60 p-4 font-mono text-sm leading-relaxed">
+      {text}
+    </pre>
   );
+}
+
+function MediaView({
+  blob,
+  type,
+  name,
+  kind,
+}: {
+  blob: Blob;
+  type: string;
+  name: string;
+  kind: "image" | "audio" | "video";
+}) {
+  const url = useMemo(() => URL.createObjectURL(blob.type ? blob : new Blob([blob], { type })), [blob, type]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  if (kind === "audio") {
+    return <audio controls src={url} className="w-full" />;
+  }
+  if (kind === "video") {
+    return <video controls src={url} className="max-h-[60vh] w-full rounded-sm border border-mist bg-black" />;
+  }
   // eslint-disable-next-line @next/next/no-img-element -- decrypted blob URL, next/image can't optimize it
   return <img src={url} alt={name} className="max-h-[60vh] w-full rounded-sm border border-mist object-contain" />;
 }

@@ -32,7 +32,13 @@ const STEP_LABELS: Record<CreateStep, string> = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isRenderable(type: string): boolean {
-  return type.startsWith("text/") || type.startsWith("image/") || type === "application/pdf";
+  return (
+    type.startsWith("text/") ||
+    type.startsWith("image/") ||
+    type.startsWith("audio/") ||
+    type.startsWith("video/") ||
+    type === "application/pdf"
+  );
 }
 
 interface PolicyState {
@@ -102,12 +108,14 @@ export function CreateShare() {
     event.preventDefault();
     setError(null);
 
-    let data: Uint8Array;
+    let data: Uint8Array | Blob;
+    let size: number;
     let name: string;
     let type: string;
     if (mode === "message") {
       if (!message.trim()) return setError("Write a message first.");
       data = utf8Encode(message);
+      size = data.length;
       name = "message.txt";
       type = "text/plain";
     } else {
@@ -115,7 +123,8 @@ export function CreateShare() {
       if (file.size > MAX_PLAINTEXT_BYTES) {
         return setError(`Files are capped at ${formatBytes(MAX_PLAINTEXT_BYTES)} for now.`);
       }
-      data = new Uint8Array(await file.arrayBuffer());
+      data = file; // streamed chunk-by-chunk — never fully in memory
+      size = file.size;
       name = file.name;
       type = file.type || "application/octet-stream";
     }
@@ -140,7 +149,7 @@ export function CreateShare() {
     try {
       const receipt = await createShareFlow({
         data,
-        metadata: { name, size: data.length, type },
+        metadata: { name, size, type },
         password: password || undefined,
         expiresIn: policy.expiresIn,
         maxViews: policy.maxViews === "" ? null : Number(policy.maxViews),
