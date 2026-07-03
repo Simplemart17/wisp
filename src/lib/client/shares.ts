@@ -3,8 +3,24 @@
  * the API only ever sees ciphertext, wrap records and policy.
  */
 import { type KdfParams, type ShareMetadata, fromBase64Url, toBase64Url } from "@/lib/crypto";
+import type {
+  AccessResponseDto,
+  AuditReportDto,
+  ShareStatusDto,
+  SigningStateDto,
+  WatermarkDto,
+} from "@/lib/shared/api";
 import type { ErrorKind } from "@/lib/shared/errors";
 import { createEncryptedShareFromBlob, openEncryptedShareBlob } from "./stream-crypto";
+
+// Wire contracts live in @/lib/shared/api (shared with the server). Aliased
+// here under the names the components already import.
+export type ShareStatus = ShareStatusDto;
+export type WatermarkPayload = WatermarkDto;
+export type SigningState = SigningStateDto;
+export type AuditReport = AuditReportDto;
+export type AuditEntry = AuditReportDto["entries"][number];
+export type RecipientStatus = AuditReportDto["recipients"][number];
 
 export class ShareApiError extends Error {
   constructor(
@@ -148,13 +164,6 @@ export async function createShareFlow(options: CreateShareOptions): Promise<Shar
   };
 }
 
-export interface ShareStatus {
-  requiresPassword: boolean;
-  requiresIdentity: boolean;
-  expired: boolean;
-  exhausted: boolean;
-}
-
 export function fetchShareStatus(id: string): Promise<ShareStatus> {
   return requestJson<ShareStatus>(`/api/shares/${id}`);
 }
@@ -162,27 +171,6 @@ export function fetchShareStatus(id: string): Promise<ShareStatus> {
 /** Ask the server to email a one-time code (identity shares). Always "ok". */
 export async function requestOtp(id: string, email: string): Promise<void> {
   await postJson<{ ok: boolean }>(`/api/shares/${id}/otp`, { email });
-}
-
-export interface WatermarkPayload {
-  email: string | null;
-  ipHash: string;
-  accessId: number | null;
-  linkId: string;
-}
-
-export interface SignatureRecord {
-  encryptedEnvelope: string | null; // base64url, sealed under the CEK subkey
-  signedAt: string;
-  emailHint: string | null;
-}
-
-export interface SigningState {
-  required: boolean;
-  /** Single-use ticket for THIS recipient; null when not theirs to sign. */
-  ticket: string | null;
-  alreadySigned: boolean;
-  envelopes: SignatureRecord[];
 }
 
 /**
@@ -207,17 +195,7 @@ export interface AccessCredentials {
 }
 
 export async function accessShare(id: string, credentials?: AccessCredentials): Promise<AccessedShare> {
-  const payload = await postJson<{
-    url: string;
-    encryptedMetadata: string;
-    wrappedCek: string | null;
-    kdfSalt: string | null;
-    kdfParams: KdfParams | null;
-    remainingViews: number | null;
-    signing: SigningState | null;
-    viewOnly: boolean;
-    watermark: WatermarkPayload | null;
-  }>(`/api/shares/${id}/access`, credentials ?? {});
+  const payload = await postJson<AccessResponseDto>(`/api/shares/${id}/access`, credentials ?? {});
 
   const blobRes = await fetch(payload.url);
   if (!blobRes.ok) {
@@ -271,42 +249,6 @@ export function decryptAccessedShare(
     kdfParams: accessed.kdfParams,
     password,
   });
-}
-
-export interface AuditEntry {
-  ts: string;
-  ip_hash: string | null;
-  user_agent: string | null;
-  action: string;
-  result: string;
-  recipients: { email_hint: string | null } | null;
-}
-
-export interface RecipientStatus {
-  link_id: string;
-  email_hint: string | null;
-  views_remaining: number | null;
-  verified_at: string | null;
-  revoked: boolean;
-  signedAt: string | null;
-}
-
-export interface AuditReport {
-  share: {
-    id: string;
-    createdAt: string;
-    expiresAt: string | null;
-    expired: boolean;
-    exhausted: boolean;
-    remainingViews: number | null;
-    requiresPassword: boolean;
-    requiresIdentity: boolean;
-    requiresSignature: boolean;
-    viewOnly: boolean;
-    watermark: boolean;
-  };
-  recipients: RecipientStatus[];
-  entries: AuditEntry[];
 }
 
 /** Without a token, the request rides on the Clerk session cookie (owners). */

@@ -1,5 +1,5 @@
+import { insertReport } from "@/lib/server/db/maintenance";
 import { ApiError, clientIp, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { wispDb } from "@/lib/server/supabase";
 import { hashIp } from "@/lib/server/tokens";
 import { SHARE_ID_RE } from "@/lib/server/validation";
 
@@ -21,19 +21,10 @@ export async function POST(req: Request): Promise<Response> {
       throw new ApiError(400, "reason must be one of: illegal, malware, phishing, other");
     }
     const shareId =
-      typeof body.shareId === "string" && SHARE_ID_RE.test(body.shareId)
-        ? body.shareId
-        : null;
+      typeof body.shareId === "string" && SHARE_ID_RE.test(body.shareId) ? body.shareId : null;
     const details = typeof body.details === "string" ? body.details.slice(0, 2000) : null;
 
-    const { error } = await wispDb().from("reports").insert({
-      share_id: shareId,
-      reason: body.reason,
-      details,
-      ip_hash: hashIp(clientIp(req)),
-    });
-    if (error) throw new Error(`report insert failed: ${error.message}`);
-
+    await insertReport({ shareId, reason: body.reason, details, ipHash: hashIp(clientIp(req)) });
     return jsonResponse({ ok: true }, 201);
   } catch (error) {
     return errorResponse(error);

@@ -157,19 +157,19 @@ export function ManageShare({ id }: { id: string }) {
               </thead>
               <tbody>
                 {report.recipients.map((r) => (
-                  <tr key={r.link_id} className="border-b border-mist/60 last:border-0">
-                    <td className="px-3 py-2">{r.email_hint ?? r.link_id}</td>
+                  <tr key={r.linkId} className="border-b border-mist/60 last:border-0">
+                    <td className="px-3 py-2">{r.emailHint ?? r.linkId}</td>
                     <td className="px-3 py-2">
                       {r.revoked ? (
                         <span className="text-wax">revoked</span>
-                      ) : r.views_remaining === null ? (
+                      ) : r.viewsRemaining === null ? (
                         "unlimited"
                       ) : (
-                        r.views_remaining
+                        r.viewsRemaining
                       )}
                     </td>
                     <td className="px-3 py-2 text-faded">
-                      {r.verified_at ? new Date(r.verified_at).toLocaleString() : "—"}
+                      {r.verifiedAt ? new Date(r.verifiedAt).toLocaleString() : "—"}
                     </td>
                     {s.requiresSignature ? (
                       <td className="px-3 py-2">
@@ -186,7 +186,7 @@ export function ManageShare({ id }: { id: string }) {
                       {!r.revoked ? (
                         <button
                           type="button"
-                          onClick={() => void revokeRecipient(r.link_id)}
+                          onClick={() => void revokeRecipient(r.linkId)}
                           className="text-wax hover:underline"
                         >
                           revoke link
@@ -228,8 +228,8 @@ export function ManageShare({ id }: { id: string }) {
                         {entry.action} · {entry.result}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-faded" title={entry.user_agent ?? undefined}>
-                      {entry.recipients?.email_hint ?? entry.ip_hash ?? "—"}
+                    <td className="px-3 py-2 text-faded" title={entry.userAgent ?? undefined}>
+                      {entry.emailHint ?? entry.ipHash ?? "—"}
                     </td>
                   </tr>
                 ))}
