@@ -102,7 +102,7 @@ export function OpenedView({
             type="button"
             onClick={() => void download()}
             disabled={downloading}
-            className="rounded-sm border border-mist px-4 py-2 text-sm hover:border-verdigris hover:text-verdigris disabled:opacity-60"
+            className="rounded-sm border border-mist px-4 py-2 text-sm font-medium transition-colors hover:border-ink disabled:opacity-60"
           >
             {downloading ? "Preparing…" : watermark ? "Download watermarked copy" : "Download"}
           </button>
@@ -151,7 +151,7 @@ function TextBlock({ blob }: { blob: Blob }) {
   }, [blob]);
   if (text === null) return null;
   return (
-    <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-sm border border-mist bg-white/60 p-4 font-mono text-sm leading-relaxed">
+    <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-sm border border-mist bg-card p-4 font-mono text-sm leading-relaxed">
       {text}
     </pre>
   );
