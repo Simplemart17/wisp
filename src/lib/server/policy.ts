@@ -4,11 +4,14 @@
  * creation (per-recipient links), it is never stored inside the policy JSON.
  */
 import type { KdfParams } from "@/lib/crypto";
+import { POLICY_FLAGS, POLICY_VERSION, type SharePolicy } from "@/lib/shared/policy";
 import { isValidEmail, normalizeEmail } from "./email";
 import { ApiError } from "./http";
 import { BASE64URL_RE, base64UrlByteLength } from "./validation";
 import { BLOB_PATH_RE } from "./tokens";
 import { MAX_ENCRYPTED_METADATA_BYTES } from "./supabase";
+
+export type { SharePolicy };
 
 export const EXPIRY_OPTIONS: Record<string, number> = {
   "1h": 60 * 60,
@@ -21,17 +24,6 @@ const MAX_VIEWS_CAP = 100;
 export const MAX_RECIPIENTS = 20;
 const WRAPPED_CEK_BYTES = 60; // 12 nonce + 32 key + 16 tag
 const KDF_SALT_BYTES = 16;
-
-export interface SharePolicy {
-  expiresIn: keyof typeof EXPIRY_OPTIONS;
-  maxViews: number | null;
-  password: boolean;
-  requireIdentity: boolean; // server-enforced email OTP gate
-  requireSignature: boolean; // cryptographic ECDSA envelope + server-attested identity
-  viewOnly: boolean; // client-honored: no download affordance
-  watermark: boolean; // client-honored: burned into the rendered canvas
-  notifyEmail: string | null; // notify-on-open target (sender-provided)
-}
 
 export interface ValidatedCreateShare {
   ciphertextRef: string;
@@ -148,7 +140,7 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
   ) {
     throw new ApiError(400, `policy.maxViews must be null or an integer 1..${MAX_VIEWS_CAP}`);
   }
-  for (const flag of ["requireIdentity", "requireSignature", "viewOnly", "watermark"] as const) {
+  for (const flag of POLICY_FLAGS) {
     if (p[flag] !== undefined && typeof p[flag] !== "boolean") {
       throw new ApiError(400, `policy.${flag} must be a boolean`);
     }
@@ -171,7 +163,8 @@ export function parseCreateShare(body: Record<string, unknown>): ValidatedCreate
     kdfSalt,
     kdfParams,
     policy: {
-      expiresIn: p.expiresIn as keyof typeof EXPIRY_OPTIONS,
+      v: POLICY_VERSION,
+      expiresIn: p.expiresIn as SharePolicy["expiresIn"],
       maxViews: (p.maxViews as number | undefined) ?? null,
       password: wrappedCek !== null,
       requireIdentity,
