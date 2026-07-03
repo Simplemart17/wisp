@@ -2,56 +2,110 @@
 
 :root {
   color-scheme: light;
-  --paper: #f5f8f6;
-  --pane: #eef2f0;
-  --ink: #16211e;
-  --faded: #5c6b66;
-  --mist: #d8e0dc;
-  --verdigris: #206b58;
-  --verdigris-deep: #14483a;
-  --wax: #a34324;
-  --wax-deep: #7c2f16;
+  /* Cipher — cool porcelain ground, ink, one emerald signal. */
+  --paper: #f0f1ee; /* tinted ground */
+  --pane: #e7e9e4; /* subtle fill / wells */
+  --card: #ffffff; /* crisp cards on the ground */
+  --ink: #14181a; /* cool near-black */
+  --faded: #656c6c; /* muted text */
+  --hush: #9aa19f; /* tertiary / placeholder */
+  --mist: #e0e3de; /* hairline borders */
+  --verdigris: #0d8a58; /* emerald signal */
+  --verdigris-deep: #0a6b45;
+  --wax: #cb4327; /* destructive */
+  --wax-deep: #a3331c;
 }
 
 @theme inline {
   --color-paper: var(--paper);
   --color-pane: var(--pane);
+  --color-card: var(--card);
   --color-ink: var(--ink);
   --color-faded: var(--faded);
+  --color-hush: var(--hush);
   --color-mist: var(--mist);
   --color-verdigris: var(--verdigris);
   --color-verdigris-deep: var(--verdigris-deep);
   --color-wax: var(--wax);
   --color-wax-deep: var(--wax-deep);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-fraunces);
+  --font-mono: var(--font-plex-mono);
+  --font-display: var(--font-space-grotesk);
+  /* Softer, more modern corner language than the old 2px sharp. */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
 }
 
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #ffffff 0%, rgba(255, 255, 255, 0) 60%),
+    var(--paper);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* The unfog reveal — the one orchestrated moment in the app. */
+/* Display face: tighten and set a confident optical scale. */
+.font-display {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--verdigris) 22%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--verdigris);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Soft card elevation used across panels. */
+.elevate {
+  box-shadow:
+    0 1px 2px rgba(20, 24, 26, 0.05),
+    0 4px 16px -6px rgba(20, 24, 26, 0.08);
+}
+
+/* The unfog reveal — sealed → legible, the app's signature moment. */
 @keyframes unfog {
   from {
     opacity: 0;
-    filter: blur(10px);
+    filter: blur(12px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
     filter: blur(0);
+    transform: none;
   }
 }
 
 .unfog {
-  animation: unfog 0.7s ease-out both;
+  animation: unfog 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Quiet entrance for stacked content. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unfog {
+  .unfog,
+  .rise {
     animation: none;
   }
 }

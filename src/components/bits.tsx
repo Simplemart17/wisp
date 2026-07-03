@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 
+const TIER_DOT = {
+  encrypted: "bg-verdigris",
+  "server-enforced": "bg-faded",
+  "client-honored": "bg-wax",
+} as const;
+
 /**
  * Honesty chips (SPEC §1): every control is labeled with the tier that
  * actually guarantees it, so the UI never promises more than it delivers.
  */
-export function TierChip({ tier }: { tier: "encrypted" | "server-enforced" | "client-honored" }) {
-  const styles = {
-    encrypted: "border-verdigris/40 text-verdigris",
-    "server-enforced": "border-mist text-faded",
-    "client-honored": "border-wax/30 text-wax",
-  }[tier];
+export function TierChip({ tier }: { tier: keyof typeof TIER_DOT }) {
   return (
-    <span
-      className={`rounded-sm border px-1.5 py-px font-mono text-[10px] uppercase tracking-wider ${styles}`}
-    >
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-mist bg-card/70 px-2 py-0.5 font-mono text-[10px] text-faded">
+      <span className={`h-1.5 w-1.5 rounded-full ${TIER_DOT[tier]}`} />
       {tier}
     </span>
   );
@@ -25,12 +25,12 @@ export function CopyField({ label, value, hint }: { label: string; value: string
   const [copied, setCopied] = useState(false);
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-faded">{label}</span>
-        {hint ? <span className="text-[11px] text-wax">{hint}</span> : null}
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="font-mono text-xs text-faded">{label}</span>
+        {hint ? <span className="text-[11px] font-medium text-wax">{hint}</span> : null}
       </div>
-      <div className="flex items-stretch gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-sm border border-mist bg-pane px-2.5 py-2 font-mono text-xs leading-5">
+      <div className="group flex items-stretch overflow-hidden rounded-sm border border-mist bg-card focus-within:border-verdigris">
+        <code className="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-xs leading-5 text-ink">
           {value}
         </code>
         <button
@@ -40,9 +40,9 @@ export function CopyField({ label, value, hint }: { label: string; value: string
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="shrink-0 rounded-sm border border-mist px-3 font-mono text-xs text-ink hover:border-verdigris hover:text-verdigris"
+          className="shrink-0 border-l border-mist px-3.5 font-mono text-xs font-medium text-ink transition-colors hover:bg-ink hover:text-paper"
         >
-          {copied ? "copied" : "copy"}
+          {copied ? "copied ✓" : "copy"}
         </button>
       </div>
     </div>
@@ -57,15 +57,15 @@ export function Notice({
   children: React.ReactNode;
 }) {
   const styles = {
-    info: "border-mist bg-pane text-faded",
-    warn: "border-wax/30 bg-wax/5 text-wax-deep",
-    error: "border-wax/50 bg-wax/10 text-wax-deep",
+    info: "border-mist bg-card/60 text-faded",
+    warn: "border-wax/25 bg-wax/[0.06] text-wax-deep",
+    error: "border-wax/40 bg-wax/[0.09] text-wax-deep",
   }[tone];
   // Errors/warnings are announced to assistive tech; info is polite.
   return (
     <div
       role={tone === "info" ? "status" : "alert"}
-      className={`rounded-sm border px-3 py-2.5 text-sm leading-relaxed ${styles}`}
+      className={`rounded-sm border px-3.5 py-3 text-sm leading-relaxed ${styles}`}
     >
       {children}
     </div>

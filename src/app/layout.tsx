@@ -1,6 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Geist, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import { headers } from "next/headers";
 import Link from "next/link";
 
@@ -9,12 +9,15 @@ import { env } from "@/lib/server/env";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
   subsets: ["latin"],
-  style: ["normal", "italic"],
-  weight: ["400", "600"],
+  weight: ["400", "500", "600"],
+});
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -33,25 +36,29 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const page = (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} min-h-dvh antialiased`}
+        className={`${geistSans.variable} ${plexMono.variable} ${spaceGrotesk.variable} min-h-dvh antialiased`}
       >
         <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5">
-          <header className="flex items-baseline justify-between border-b border-mist py-5">
-            <Link href="/" className="font-display text-2xl italic tracking-tight">
-              Wisp
+          <header className="flex items-center justify-between py-6">
+            <Link href="/" className="group flex items-center gap-2.5" aria-label="Wisp home">
+              <span className="grid h-7 w-7 place-items-center rounded-md bg-ink text-[13px] font-semibold text-paper transition-colors group-hover:bg-verdigris">
+                ✦
+              </span>
+              <span className="font-display text-xl tracking-tight">wisp</span>
             </Link>
             <span className="flex items-center gap-4">
-              <p className="hidden font-mono text-[11px] uppercase tracking-widest text-faded sm:block">
-                sealed · expiring · zero-knowledge
-              </p>
+              <span className="hidden items-center gap-2 font-mono text-[11px] tracking-tight text-faded sm:flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-verdigris" />
+                zero-knowledge
+              </span>
               {clerkEnabled ? <AuthCorner /> : null}
             </span>
           </header>
-          <main className="flex-1 py-10">{children}</main>
-          <footer className="border-t border-mist py-5">
-            <p className="text-xs leading-relaxed text-faded">
+          <main className="flex-1 py-6">{children}</main>
+          <footer className="mt-8 border-t border-mist py-6">
+            <p className="max-w-prose text-xs leading-relaxed text-faded">
               Everything is encrypted in your browser before upload. The key lives in the link
-              itself — after the <span className="font-mono">#</span> — and is never sent to any
+              itself — after the <span className="font-mono text-ink">#</span> — and never reaches a
               server, so we couldn&apos;t read your content if we wanted to.
             </p>
           </footer>
