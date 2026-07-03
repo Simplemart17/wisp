@@ -39,15 +39,15 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-function postJson<T>(url: string, body: unknown): Promise<T> {
+function postJson<T>(url: string, body: unknown, headers?: Record<string, string>): Promise<T> {
   return requestJson<T>(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }
 
-export type CreateStep = "encrypting" | "uploading" | "registering";
+export type CreateStep = "encrypting" | "uploading" | "registering" | "notifying";
 
 export interface CreateShareOptions {
   data: Uint8Array;
@@ -55,13 +55,28 @@ export interface CreateShareOptions {
   password?: string;
   expiresIn: string;
   maxViews: number | null;
+  requireIdentity?: boolean;
+  recipients?: string[];
+  viewOnly?: boolean;
+  watermark?: boolean;
+  notifyEmail?: string | null;
+  /** Email each recipient their unique link after creation (identity shares). */
+  sendEmails?: boolean;
   onStep?: (step: CreateStep) => void;
+}
+
+export interface RecipientLink {
+  email: string;
+  url: string;
 }
 
 export interface ShareReceipt {
   id: string;
   shareUrl: string;
   manageUrl: string;
+  /** Per-recipient links (identity shares) — the share id differs per person. */
+  recipientLinks: RecipientLink[];
+  emailsSent: number;
 }
 
 export async function createShareFlow(options: CreateShareOptions): Promise<ShareReceipt> {
@@ -86,31 +101,74 @@ export async function createShareFlow(options: CreateShareOptions): Promise<Shar
   }
 
   options.onStep?.("registering");
-  const created = await postJson<{ id: string; managementToken: string }>("/api/shares", {
+  const created = await postJson<{
+    id: string;
+    managementToken: string;
+    recipientLinks: Array<{ email: string; linkId: string }>;
+  }>("/api/shares", {
     ciphertextRef: upload.path,
     encryptedMetadata: toBase64Url(encrypted.encryptedMetadata),
     wrappedCek: encrypted.wrappedCek ? toBase64Url(encrypted.wrappedCek) : null,
     kdfSalt: encrypted.kdfSalt ? toBase64Url(encrypted.kdfSalt) : null,
     kdfParams: encrypted.kdfParams,
-    policy: { expiresIn: options.expiresIn, maxViews: options.maxViews },
+    policy: {
+      expiresIn: options.expiresIn,
+      maxViews: options.maxViews,
+      requireIdentity: options.requireIdentity === true,
+      viewOnly: options.viewOnly === true,
+      watermark: options.watermark === true,
+      notifyEmail: options.notifyEmail || null,
+    },
+    recipients: options.recipients ?? [],
   });
 
   const origin = window.location.origin;
+  const recipientLinks = created.recipientLinks.map((r) => ({
+    email: r.email,
+    url: `${origin}/s/${r.linkId}#${encrypted.linkKey}`,
+  }));
+
+  let emailsSent = 0;
+  if (options.sendEmails && recipientLinks.length > 0) {
+    options.onStep?.("notifying");
+    const sent = await postJson<{ sent: number }>(
+      `/api/shares/${created.id}/send-links`,
+      { links: recipientLinks },
+      { "x-management-token": created.managementToken },
+    );
+    emailsSent = sent.sent;
+  }
+
   return {
     id: created.id,
     shareUrl: `${origin}/s/${created.id}#${encrypted.linkKey}`,
     manageUrl: `${origin}/manage/${created.id}#${created.managementToken}`,
+    recipientLinks,
+    emailsSent,
   };
 }
 
 export interface ShareStatus {
   requiresPassword: boolean;
+  requiresIdentity: boolean;
   expired: boolean;
   exhausted: boolean;
 }
 
 export function fetchShareStatus(id: string): Promise<ShareStatus> {
   return requestJson<ShareStatus>(`/api/shares/${id}`);
+}
+
+/** Ask the server to email a one-time code (identity shares). Always "ok". */
+export async function requestOtp(id: string, email: string): Promise<void> {
+  await postJson<{ ok: boolean }>(`/api/shares/${id}/otp`, { email });
+}
+
+export interface WatermarkPayload {
+  email: string | null;
+  ipHash: string;
+  accessId: number | null;
+  linkId: string;
 }
 
 /**
@@ -124,9 +182,16 @@ export interface AccessedShare {
   kdfSalt: Uint8Array | null;
   kdfParams: KdfParams | null;
   remainingViews: number | null;
+  viewOnly: boolean;
+  watermark: WatermarkPayload | null;
 }
 
-export async function accessShare(id: string): Promise<AccessedShare> {
+export interface AccessCredentials {
+  email?: string;
+  code?: string;
+}
+
+export async function accessShare(id: string, credentials?: AccessCredentials): Promise<AccessedShare> {
   const payload = await postJson<{
     url: string;
     encryptedMetadata: string;
@@ -134,7 +199,9 @@ export async function accessShare(id: string): Promise<AccessedShare> {
     kdfSalt: string | null;
     kdfParams: KdfParams | null;
     remainingViews: number | null;
-  }>(`/api/shares/${id}/access`, {});
+    viewOnly: boolean;
+    watermark: WatermarkPayload | null;
+  }>(`/api/shares/${id}/access`, credentials ?? {});
 
   const blobRes = await fetch(payload.url);
   if (!blobRes.ok) {
@@ -147,6 +214,8 @@ export async function accessShare(id: string): Promise<AccessedShare> {
     kdfSalt: payload.kdfSalt ? fromBase64Url(payload.kdfSalt) : null,
     kdfParams: payload.kdfParams,
     remainingViews: payload.remainingViews,
+    viewOnly: payload.viewOnly,
+    watermark: payload.watermark,
   };
 }
 
@@ -178,6 +247,15 @@ export interface AuditEntry {
   user_agent: string | null;
   action: string;
   result: string;
+  recipients: { email_hint: string | null } | null;
+}
+
+export interface RecipientStatus {
+  link_id: string;
+  email_hint: string | null;
+  views_remaining: number | null;
+  verified_at: string | null;
+  revoked: boolean;
 }
 
 export interface AuditReport {
@@ -189,7 +267,11 @@ export interface AuditReport {
     exhausted: boolean;
     remainingViews: number | null;
     requiresPassword: boolean;
+    requiresIdentity: boolean;
+    viewOnly: boolean;
+    watermark: boolean;
   };
+  recipients: RecipientStatus[];
   entries: AuditEntry[];
 }
 
@@ -199,9 +281,10 @@ export function fetchAudit(id: string, managementToken: string): Promise<AuditRe
   });
 }
 
-export async function revokeShare(id: string, managementToken: string): Promise<void> {
-  await requestJson<{ ok: boolean }>(`/api/shares/${id}/revoke`, {
-    method: "POST",
-    headers: { "x-management-token": managementToken },
-  });
+export async function revokeShare(id: string, managementToken: string, linkId?: string): Promise<void> {
+  await postJson<{ ok: boolean }>(
+    `/api/shares/${id}/revoke`,
+    linkId ? { linkId } : {},
+    { "x-management-token": managementToken },
+  );
 }
