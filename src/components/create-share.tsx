@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { utf8Encode } from "@/lib/crypto/encoding";
 import { type CreateStep, type ShareReceipt, createShareFlow } from "@/lib/client/shares";
+import { isCanvasRenderable } from "@/lib/client/render/canvas";
 import { CopyField, Notice, TierChip, formatBytes } from "./bits";
 
 const MAX_PLAINTEXT_BYTES = 100 * 1024 * 1024;
@@ -31,13 +32,6 @@ const STEP_LABELS: Record<CreateStep, string> = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Types the viewer paints to <canvas> — the only ones where view-only (no
-// download affordance) and a burned watermark can actually be honored. Audio
-// and video can be played but not watermarked, and native controls defeat
-// view-only, so those controls are not offered for them.
-function isCanvasRenderable(type: string): boolean {
-  return type.startsWith("text/") || type.startsWith("image/") || type === "application/pdf";
-}
 
 interface PolicyState {
   expiresIn: string;

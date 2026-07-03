@@ -10,6 +10,15 @@ import type { WatermarkPayload } from "@/lib/client/shares";
 
 export const RENDER_WIDTH = 1000; // CSS px basis; canvases scale to fit
 
+/**
+ * The content types the viewer paints to <canvas> — the only ones where
+ * view-only (no download affordance) and a burned watermark can actually be
+ * honored. Single source of truth for the create form and the viewer.
+ */
+export function isCanvasRenderable(type: string): boolean {
+  return type.startsWith("text/") || type.startsWith("image/") || type === "application/pdf";
+}
+
 export function renderTextToCanvas(text: string, width = RENDER_WIDTH): HTMLCanvasElement {
   const scale = Math.min(window.devicePixelRatio || 1, 2);
   const fontSize = 15;

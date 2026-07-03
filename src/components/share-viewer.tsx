@@ -16,6 +16,7 @@ import { SigningPanel } from "./signing-panel";
 import { WispCryptoError, type ShareMetadata } from "@/lib/crypto";
 import {
   applyVisibleWatermark,
+  isCanvasRenderable,
   renderImageToCanvas,
   renderPdfToCanvases,
   renderTextToCanvas,
@@ -323,10 +324,6 @@ export function ShareViewer({ id }: { id: string }) {
   );
 }
 
-function canRenderToCanvas(type: string): boolean {
-  return type.startsWith("text/") || type.startsWith("image/") || type === "application/pdf";
-}
-
 function OpenedView({
   blob,
   metadata,
@@ -342,7 +339,7 @@ function OpenedView({
   watermark: WatermarkPayload | null;
   shareId: string;
 }) {
-  const renderable = canRenderToCanvas(metadata.type);
+  const renderable = isCanvasRenderable(metadata.type);
   const playable = metadata.type.startsWith("audio/") || metadata.type.startsWith("video/");
   const useCanvas = renderable && (viewOnly || watermark !== null);
   const canvasHost = useRef<HTMLDivElement>(null);
