@@ -123,7 +123,15 @@ export function ManageShare({ id }: { id: string }) {
         </div>
         <div>
           <dt className="font-mono text-[10px] uppercase tracking-widest text-faded">views left</dt>
-          <dd>{s.remainingViews === null ? "unlimited" : s.remainingViews}</dd>
+          {/* Identity shares track views per recipient (see the table), so the
+              share-level count would be misleading. */}
+          <dd>
+            {s.requiresIdentity
+              ? "per recipient"
+              : s.remainingViews === null
+                ? "unlimited"
+                : s.remainingViews}
+          </dd>
         </div>
         <div>
           <dt className="font-mono text-[10px] uppercase tracking-widest text-faded">password</dt>

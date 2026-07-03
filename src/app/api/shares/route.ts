@@ -2,7 +2,7 @@ import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@
 import { parseCreateShare } from "@/lib/server/policy";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { senderUserId } from "@/lib/server/sender-auth";
-import { bytesToPgHex, wispDb } from "@/lib/server/supabase";
+import { CIPHERTEXT_BUCKET, bytesToPgHex, wispDb } from "@/lib/server/supabase";
 import { emailHint } from "@/lib/server/email";
 import {
   generateManagementToken,
@@ -48,25 +48,47 @@ export async function POST(req: Request): Promise<Response> {
     const { error } = await db.from("shares").insert({ id, ...baseRow });
     if (error) throw new Error(`share insert failed: ${error.message}`);
 
+    // These inserts are not one transaction (PostgREST), so on any later
+    // failure we best-effort roll back: deleting the parent cascades to child
+    // shares + recipients, and we drop the already-uploaded blob so it isn't
+    // orphaned (the sweeper only tracks live share rows).
+    const rollback = async () => {
+      try {
+        await db.storage.from(CIPHERTEXT_BUCKET).remove([input.ciphertextRef]);
+      } catch {
+        /* best-effort */
+      }
+      try {
+        await db.from("shares").delete().eq("id", id);
+      } catch {
+        /* best-effort */
+      }
+    };
+
     let recipientLinks: Array<{ email: string; linkId: string }> = [];
-    if (input.policy.requireIdentity) {
-      recipientLinks = input.recipients.map((email) => ({ email, linkId: generateShareId() }));
+    try {
+      if (input.policy.requireIdentity) {
+        recipientLinks = input.recipients.map((email) => ({ email, linkId: generateShareId() }));
 
-      const { error: childError } = await db.from("shares").insert(
-        recipientLinks.map((r) => ({ id: r.linkId, ...baseRow, parent_share_id: id })),
-      );
-      if (childError) throw new Error(`child share insert failed: ${childError.message}`);
+        const { error: childError } = await db.from("shares").insert(
+          recipientLinks.map((r) => ({ id: r.linkId, ...baseRow, parent_share_id: id })),
+        );
+        if (childError) throw new Error(`child share insert failed: ${childError.message}`);
 
-      const { error: recipientError } = await db.from("recipients").insert(
-        recipientLinks.map((r) => ({
-          share_id: id,
-          link_id: r.linkId,
-          email_hash: sha256Base64Url(r.email),
-          email_hint: emailHint(r.email),
-          views_remaining: input.policy.maxViews, // null = unlimited, per recipient
-        })),
-      );
-      if (recipientError) throw new Error(`recipients insert failed: ${recipientError.message}`);
+        const { error: recipientError } = await db.from("recipients").insert(
+          recipientLinks.map((r) => ({
+            share_id: id,
+            link_id: r.linkId,
+            email_hash: sha256Base64Url(r.email),
+            email_hint: emailHint(r.email),
+            views_remaining: input.policy.maxViews, // null = unlimited, per recipient
+          })),
+        );
+        if (recipientError) throw new Error(`recipients insert failed: ${recipientError.message}`);
+      }
+    } catch (partial) {
+      await rollback();
+      throw partial;
     }
 
     return jsonResponse({ id, managementToken, recipientLinks }, 201);

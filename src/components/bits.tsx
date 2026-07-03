@@ -61,7 +61,15 @@ export function Notice({
     warn: "border-wax/30 bg-wax/5 text-wax-deep",
     error: "border-wax/50 bg-wax/10 text-wax-deep",
   }[tone];
-  return <div className={`rounded-sm border px-3 py-2.5 text-sm leading-relaxed ${styles}`}>{children}</div>;
+  // Errors/warnings are announced to assistive tech; info is polite.
+  return (
+    <div
+      role={tone === "info" ? "status" : "alert"}
+      className={`rounded-sm border px-3 py-2.5 text-sm leading-relaxed ${styles}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function formatBytes(size: number): string {

@@ -21,6 +21,12 @@ export async function POST(req: Request): Promise<Response> {
     // Stale OTP codes have no blob to clean — delete directly.
     await db.from("otp_codes").delete().lt("expires_at", new Date(Date.now() - 3600_000).toISOString());
 
+    // NOTE: `policy->>maxViews.eq.0` only matches ANONYMOUS shares, whose global
+    // counter reaches 0. Identity shares track views per recipient
+    // (recipients.views_remaining) and never decrement the parent's policy, so
+    // a fully-exhausted identity share is reclaimed on EXPIRY, not exhaustion.
+    // Expiry still bounds retention; tightening this to exhaustion needs an
+    // aggregate over recipients (future RPC).
     const { data, error } = await db
       .from("shares")
       .select("id, ciphertext_ref")
