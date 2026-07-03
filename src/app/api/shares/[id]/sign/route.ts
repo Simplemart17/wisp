@@ -1,15 +1,14 @@
 import { logAccess } from "@/lib/server/audit";
 import { sendEmail } from "@/lib/server/email";
-import { ApiError, clientIp, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { ApiError, clientIp, enforceRateLimit, errorResponse, jsonResponse, readJsonBody } from "@/lib/server/http";
 import { getRecipientByLink, getShare, isExpired } from "@/lib/server/shares";
 import { bytesToPgHex, wispDb } from "@/lib/server/supabase";
 import { hashIp, tokenMatchesHash } from "@/lib/server/tokens";
+import { BASE64URL_RE } from "@/lib/server/validation";
 
 export const runtime = "nodejs";
 
 const MAX_ENVELOPE_BYTES = 8192;
-const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
 
 /**
  * Store a signature envelope. Authorization is the single-use signing ticket
@@ -23,9 +22,7 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    if (!rateLimit(`sign:${clientIp(req)}`, 10, 10 * 60 * 1000)) {
-      throw new ApiError(429, "Too many attempts, slow down");
-    }
+    enforceRateLimit(req, "sign", 10, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     const { ticket, encryptedEnvelope } = body;

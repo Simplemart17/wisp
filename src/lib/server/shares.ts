@@ -3,6 +3,7 @@ import type { SharePolicy } from "./policy";
 import { senderUserId } from "./sender-auth";
 import { wispDb } from "./supabase";
 import { tokenMatchesHash } from "./tokens";
+import { SHARE_ID_RE } from "./validation";
 
 /** Row shape as PostgREST returns it (bytea columns arrive as \x-hex strings). */
 export interface ShareRow {
@@ -20,8 +21,6 @@ export interface ShareRow {
   expires_at: string | null;
 }
 
-const SHARE_ID_RE = /^[A-Za-z0-9_-]{16}$/;
-
 export async function getShare(id: string): Promise<ShareRow | null> {
   if (!SHARE_ID_RE.test(id)) return null;
   const { data, error } = await wispDb().from("shares").select("*").eq("id", id).maybeSingle();
@@ -29,8 +28,26 @@ export async function getShare(id: string): Promise<ShareRow | null> {
   return data as ShareRow | null;
 }
 
+/**
+ * Load a top-level (parent) share for management routes, rejecting unknown ids
+ * and per-recipient child links (children are managed via their parent's
+ * link). Shared by revoke/audit/send-links so the gate is defined once.
+ */
+export async function getManageableParent(id: string): Promise<ShareRow> {
+  const share = await getShare(id);
+  if (!share || share.parent_share_id !== null) {
+    throw new ApiError(404, "Not found", "gone");
+  }
+  return share;
+}
+
+/** True once the ISO timestamp is at or past now (null = never expires). */
+export function isExpiredAt(expiresAt: string | null): boolean {
+  return expiresAt !== null && new Date(expiresAt).getTime() <= Date.now();
+}
+
 export function isExpired(share: ShareRow): boolean {
-  return share.expires_at !== null && new Date(share.expires_at).getTime() <= Date.now();
+  return isExpiredAt(share.expires_at);
 }
 
 export function isExhausted(share: ShareRow): boolean {

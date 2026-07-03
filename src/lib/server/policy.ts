@@ -5,6 +5,7 @@
  */
 import { isValidEmail, normalizeEmail } from "./email";
 import { ApiError } from "./http";
+import { BASE64URL_RE, base64UrlByteLength } from "./validation";
 import { BLOB_PATH_RE } from "./tokens";
 import { MAX_ENCRYPTED_METADATA_BYTES } from "./supabase";
 
@@ -17,7 +18,6 @@ export const EXPIRY_OPTIONS: Record<string, number> = {
 
 const MAX_VIEWS_CAP = 100;
 export const MAX_RECIPIENTS = 20;
-const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
 const WRAPPED_CEK_BYTES = 60; // 12 nonce + 32 key + 16 tag
 const KDF_SALT_BYTES = 16;
 
@@ -44,9 +44,6 @@ export interface ValidatedCreateShare {
   expiresAt: Date;
 }
 
-function base64UrlByteLength(value: string): number {
-  return Math.floor((value.length * 3) / 4);
-}
 
 function requireBase64Url(value: unknown, field: string, exactBytes?: number): string {
   if (typeof value !== "string" || value.length === 0 || !BASE64URL_RE.test(value)) {

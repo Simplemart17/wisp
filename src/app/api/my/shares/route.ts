@@ -1,5 +1,6 @@
 import { errorResponse, jsonResponse } from "@/lib/server/http";
 import { senderUserId } from "@/lib/server/sender-auth";
+import { isExpiredAt } from "@/lib/server/shares";
 import { wispDb } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -22,13 +23,12 @@ export async function GET(): Promise<Response> {
       .limit(100);
     if (error) throw new Error(`my shares read failed: ${error.message}`);
 
-    const now = Date.now();
     return jsonResponse({
       shares: (data ?? []).map((row) => ({
         id: row.id as string,
         createdAt: row.created_at as string,
         expiresAt: row.expires_at as string | null,
-        expired: row.expires_at !== null && new Date(row.expires_at as string).getTime() <= now,
+        expired: isExpiredAt(row.expires_at as string | null),
         policy: row.policy,
       })),
     });
