@@ -88,7 +88,18 @@ export async function findShare(id: string): Promise<ShareRecord | null> {
   if (!SHARE_ID_RE.test(id)) return null;
   const { data, error } = await wispDb().from("shares").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(`shares lookup failed: ${error.message}`);
-  return data ? toShareRecord(data as ShareRow) : null;
+  if (!data) return null;
+
+  const row = data as ShareRow;
+  // Child links carry only their identity + parent reference; content (blob,
+  // key wrap, metadata, policy, expiry) is resolved from the parent so there
+  // is a single source of truth. The returned record keeps the CHILD's id.
+  if (row.parent_share_id !== null) {
+    const parent = await findShare(row.parent_share_id);
+    if (!parent) return null; // orphaned child (shouldn't happen; cascade covers it)
+    return { ...parent, id: row.id, parentShareId: row.parent_share_id, createdAt: row.created_at };
+  }
+  return toShareRecord(row);
 }
 
 /** Load a top-level share for management routes, rejecting unknown/child ids. */
@@ -107,13 +118,11 @@ export async function insertShare(id: string, content: ShareContent): Promise<vo
   if (error) throw new Error(`share insert failed: ${error.message}`);
 }
 
-export async function insertChildShares(
-  parentId: string,
-  children: Array<{ id: string; content: ShareContent }>,
-): Promise<void> {
+/** Child links store only their id + parent reference — content lives on the parent. */
+export async function insertChildShares(parentId: string, childIds: string[]): Promise<void> {
   const { error } = await wispDb()
     .from("shares")
-    .insert(children.map((c) => ({ id: c.id, parent_share_id: parentId, ...contentColumns(c.content) })));
+    .insert(childIds.map((id) => ({ id, parent_share_id: parentId })));
   if (error) throw new Error(`child share insert failed: ${error.message}`);
 }
 

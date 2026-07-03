@@ -56,7 +56,7 @@ export async function createShare(
       recipientLinks = input.recipients.map((email) => ({ email, linkId: generateShareId() }));
       await insertChildShares(
         id,
-        recipientLinks.map((r) => ({ id: r.linkId, content })),
+        recipientLinks.map((r) => r.linkId),
       );
       await insertRecipients(
         recipientLinks.map((r) => ({
