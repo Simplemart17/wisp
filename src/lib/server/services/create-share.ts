@@ -37,6 +37,9 @@ export async function createShare(
     encryptedMetadata: input.encryptedMetadata,
     policy: input.policy,
     managementTokenHash: sha256Base64Url(managementToken),
+    // Anonymous shares consume this live counter; identity shares track views
+    // per recipient (recipients.views_remaining) and leave this unused.
+    viewsRemaining: input.policy.maxViews,
     expiresAt: input.expiresAt.toISOString(),
     ownerUserId,
   };
