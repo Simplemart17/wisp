@@ -1,0 +1,33 @@
+"use client";
+
+import { Show, SignInButton, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
+
+/** Header auth area — rendered only when Clerk is configured (SPEC §5b). */
+export function AuthCorner() {
+  return (
+    <span className="flex items-center gap-3">
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <button
+            type="button"
+            className="font-mono text-[11px] uppercase tracking-widest text-faded hover:text-verdigris"
+          >
+            sign in
+          </button>
+        </SignInButton>
+      </Show>
+      <Show when="signed-in">
+        <Link
+          href="/dashboard"
+          className="font-mono text-[11px] uppercase tracking-widest text-faded hover:text-verdigris"
+        >
+          my shares
+        </Link>
+        <UserButton
+          appearance={{ elements: { userButtonAvatarBox: { width: "1.5rem", height: "1.5rem" } } }}
+        />
+      </Show>
+    </span>
+  );
+}

@@ -273,16 +273,17 @@ export interface AuditReport {
   entries: AuditEntry[];
 }
 
-export function fetchAudit(id: string, managementToken: string): Promise<AuditReport> {
+/** Without a token, the request rides on the Clerk session cookie (owners). */
+export function fetchAudit(id: string, managementToken?: string): Promise<AuditReport> {
   return requestJson<AuditReport>(`/api/shares/${id}/audit`, {
-    headers: { "x-management-token": managementToken },
+    headers: managementToken ? { "x-management-token": managementToken } : undefined,
   });
 }
 
-export async function revokeShare(id: string, managementToken: string, linkId?: string): Promise<void> {
+export async function revokeShare(id: string, managementToken?: string, linkId?: string): Promise<void> {
   await postJson<{ ok: boolean }>(
     `/api/shares/${id}/revoke`,
     linkId ? { linkId } : {},
-    { "x-management-token": managementToken },
+    managementToken ? { "x-management-token": managementToken } : undefined,
   );
 }
