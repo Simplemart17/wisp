@@ -42,7 +42,10 @@ next-env.d.ts
 
 # committable env templates (override the .env* rule above)
 !.env.example
+!.env.deploy.example
 
 # test/session artifacts
 .playwright-mcp/
 .claude/scheduled_tasks.lock
+
+.history

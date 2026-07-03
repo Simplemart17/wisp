@@ -73,13 +73,39 @@ pnpm typecheck && pnpm lint && pnpm build
 
 ```bash
 docker build -t wisp .
-docker run -p 3000:3000 \
+docker run -p 3007:3007 \
   -e SUPABASE_URL=... -e SUPABASE_SECRET_KEY=... \
   -e WISP_IP_SALT=$(openssl rand -hex 16) wisp
 ```
 
+The image serves on port `3007` (override with `-e PORT=…`).
+
 Point it at any Supabase project — hosted or
 [self-hosted Supabase](https://supabase.com/docs/guides/self-hosting).
+
+### Docker + Cloudflare Tunnel
+
+`docker-compose.yml` runs the app with a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+as the only ingress — no ports are published on the host, so the app is
+reachable exclusively through your Cloudflare hostname.
+
+1. Zero Trust dashboard → **Networks → Tunnels → Create a tunnel**
+   (Cloudflared connector) and copy the **token**.
+2. On the tunnel, add a **Public Hostname** (e.g. `wisp.example.com`) with
+   Service **`http://app:3007`** — that's the app container's address on the
+   compose network.
+3. Configure and launch:
+
+   ```bash
+   cp .env.deploy.example .env.deploy   # fill in TUNNEL_TOKEN, Supabase, etc.
+   docker compose --env-file .env.deploy up -d --build
+   ```
+
+Notes: behind Cloudflare the default `WISP_TRUSTED_PROXY_DEPTH=1` is correct.
+The Clerk publishable key is baked into the browser bundle at image build
+time, so changing it needs a rebuild (`up -d --build`). For the expiry
+sweeper, point pg_cron at `https://<your-hostname>/api/sweep` with your
+`WISP_SWEEP_SECRET` as the bearer token.
 
 ## Environment
 

@@ -1,0 +1,39 @@
+# Wisp behind a Cloudflare Tunnel (token mode).
+#
+#   cp .env.deploy.example .env.deploy   # fill it in
+#   docker compose --env-file .env.deploy up -d --build
+#
+# The tunnel is the only ingress: the app publishes no host ports, and
+# cloudflared reaches it over the compose network at http://app:3007 — set
+# exactly that as the Service URL of your tunnel's public hostname in
+# Cloudflare Zero Trust → Networks → Tunnels.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Public by design; baked into the browser bundle (see Dockerfile).
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+    restart: unless-stopped
+    env_file: .env.deploy
+    healthcheck:
+      test: ["CMD", "wget", "-qO/dev/null", "http://127.0.0.1:3007/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    # Tunnel-only by default. Uncomment to also reach the app directly:
+    # ports:
+    #   - "127.0.0.1:3007:3007"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # From Zero Trust → Networks → Tunnels → your tunnel → token.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env.deploy}
+    depends_on:
+      app:
+        condition: service_healthy

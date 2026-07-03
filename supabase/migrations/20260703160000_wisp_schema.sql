@@ -196,12 +196,14 @@ insert into storage.buckets (id, name, public)
 values ('wisp', 'wisp', false)
 on conflict (id) do nothing;
 
--- Sweeper (optional): enable pg_cron + pg_net in Dashboard → Database →
--- Extensions, set your deployed URL + WISP_SWEEP_SECRET, then schedule:
+-- Sweeper (optional): run ONCE against the deployed project's SQL editor —
+-- NOT part of this migration, because pg_cron/pg_net only exist where the
+-- extensions are enabled (Dashboard → Database → Extensions) and the bearer
+-- secret must never be committed. With the real WISP_SWEEP_SECRET inlined:
 --
 -- select cron.schedule('wisp-sweep', '*/5 * * * *', $$
 --   select net.http_post(
---     url     := 'https://<your-app-host>/api/sweep',
+--     url     := 'https://wisp.targaet.app/api/sweep',
 --     headers := '{"Authorization": "Bearer <WISP_SWEEP_SECRET>"}'::jsonb
 --   );
 -- $$);
