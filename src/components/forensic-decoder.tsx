@@ -39,7 +39,7 @@ export function ForensicDecoder() {
   return (
     <section className="space-y-5">
       <div>
-        <h1 className="font-display text-3xl">Trace a leak.</h1>
+        <h1 className="font-display text-2xl tracking-[-0.015em]">Trace a leak</h1>
         <p className="mt-2 text-sm leading-relaxed text-faded">
           Watermarked renderings carry an invisible forensic mark. Drop a leaked image here to
           recover its <span className="font-mono">access id</span>, then match it against your
@@ -47,7 +47,7 @@ export function ForensicDecoder() {
         </p>
       </div>
 
-      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-sm border border-dashed border-mist bg-card px-4 py-10 text-sm text-faded hover:border-verdigris">
+      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-sm border border-dashed border-mist bg-card px-4 py-10 text-sm text-faded transition-colors hover:border-verdigris has-focus-visible:border-verdigris has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-verdigris">
         <input
           type="file"
           accept="image/*"
@@ -61,12 +61,18 @@ export function ForensicDecoder() {
       </label>
 
       {result.state === "working" ? (
-        <p className="font-mono text-sm text-faded">Analyzing pixels…</p>
+        <p className="flex items-center gap-2 font-mono text-sm text-faded" role="status">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-verdigris" />
+          Analyzing pixels…
+        </p>
       ) : null}
       {result.state === "found" ? (
         <div className="unfog space-y-2 rounded-sm border border-verdigris/40 bg-verdigris/5 p-4">
           <p className="text-sm">
-            Forensic mark recovered: <span className="font-mono font-medium">access #{result.accessId}</span>
+            Forensic mark recovered:{" "}
+            <span className="font-mono font-medium text-verdigris-deep">
+              access #{result.accessId}
+            </span>
           </p>
           <p className="text-xs leading-relaxed text-faded">
             Open your share&apos;s management link — the audit log row with this id tells you who

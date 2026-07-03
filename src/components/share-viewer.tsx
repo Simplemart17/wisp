@@ -2,6 +2,7 @@
 
 import { Notice } from "./bits";
 import { SigningPanel } from "./signing-panel";
+import { FoggedPane } from "./viewer/fogged-pane";
 import { GateForm } from "./viewer/gate-form";
 import { OpenedView } from "./viewer/opened-view";
 import { useShareAccess } from "./viewer/use-share-access";
@@ -27,12 +28,12 @@ export function ShareViewer({ id }: { id: string }) {
   const { phase } = access;
 
   if (phase.name === "loading") {
-    return <p className="font-mono text-sm text-faded">Checking the seal…</p>;
+    return <p className="my-auto font-mono text-sm text-faded">Checking the seal…</p>;
   }
 
   if (phase.name === "missing-key") {
     return (
-      <section className="space-y-3">
+      <section className="my-auto space-y-3">
         <h1 className="font-display text-3xl">The key is missing.</h1>
         <Notice tone="warn">
           This link has no <span className="font-mono">#key</span> fragment, so nothing can be
@@ -46,7 +47,7 @@ export function ShareViewer({ id }: { id: string }) {
   if (phase.name === "unavailable") {
     const copy = UNAVAILABLE_COPY[phase.kind];
     return (
-      <section className="space-y-3">
+      <section className="my-auto space-y-3">
         <h1 className="font-display text-3xl">{copy.title}</h1>
         <p className="text-sm leading-relaxed text-faded">{copy.body}</p>
       </section>
@@ -54,11 +55,29 @@ export function ShareViewer({ id }: { id: string }) {
   }
 
   if (phase.name === "error") {
-    return <Notice tone="error">{phase.message}</Notice>;
+    return (
+      <div className="my-auto">
+        <Notice tone="error">{phase.message}</Notice>
+      </div>
+    );
   }
 
   if (phase.name === "working") {
-    return <p className="font-mono text-sm text-faded">{phase.label}</p>;
+    // Keep the sealed pane on screen while the key turns — the unfog that
+    // follows then reads as this exact surface clearing.
+    return (
+      <section className="my-auto space-y-5">
+        <h1 className="font-display text-3xl leading-tight sm:text-4xl sm:tracking-[-0.03em]">
+          You&apos;ve received a sealed share.
+        </h1>
+        <FoggedPane>
+          <span className="flex items-center gap-2 font-mono text-xs text-faded" role="status">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-verdigris" />
+            {phase.label}
+          </span>
+        </FoggedPane>
+      </section>
+    );
   }
 
   if (phase.name === "gate") {
@@ -78,7 +97,8 @@ export function ShareViewer({ id }: { id: string }) {
   }
 
   return (
-    <>
+    // my-auto centers short reveals to match the gate; tall content tops out.
+    <div className="my-auto">
       <OpenedView
         blob={phase.blob}
         metadata={phase.metadata}
@@ -98,6 +118,6 @@ export function ShareViewer({ id }: { id: string }) {
           />
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -17,6 +17,7 @@ import { WispCryptoError, type ShareMetadata } from "@/lib/crypto";
 export interface GateState {
   requiresPassword: boolean;
   requiresIdentity: boolean;
+  hasViewLimit: boolean;
   otpSent: boolean;
   error?: string;
   accessed?: AccessedShare;
@@ -69,6 +70,7 @@ export function useShareAccess(id: string) {
             name: "gate",
             requiresPassword: status.requiresPassword,
             requiresIdentity: status.requiresIdentity,
+            hasViewLimit: status.hasViewLimit,
             otpSent: false,
           });
       })

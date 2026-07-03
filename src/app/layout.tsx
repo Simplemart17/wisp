@@ -34,33 +34,52 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const nonce = clerkEnabled ? ((await headers()).get("x-nonce") ?? undefined) : undefined;
 
   const page = (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${plexMono.variable} ${spaceGrotesk.variable} min-h-dvh antialiased`}
-      >
-        <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5">
+    // Font variables live on <html> so the @theme tokens that reference them
+    // resolve at :root — on <body> they'd be invisible to the theme layer.
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${plexMono.variable} ${spaceGrotesk.variable}`}
+    >
+      <body className="min-h-dvh antialiased">
+        {/* Wide frame for header/footer; content stays a narrow column inside. */}
+        <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 sm:px-8">
           <header className="flex items-center justify-between py-6">
             <Link href="/" className="group flex items-center gap-2.5" aria-label="Wisp home">
               <span className="grid h-7 w-7 place-items-center rounded-md bg-ink text-[13px] font-semibold text-paper transition-colors group-hover:bg-verdigris">
                 ✦
               </span>
-              <span className="font-display text-xl tracking-tight">wisp</span>
+              <span className="font-display text-xl">wisp</span>
             </Link>
-            <span className="flex items-center gap-4">
-              <span className="hidden items-center gap-2 font-mono text-[11px] tracking-tight text-faded sm:flex">
+            <span className="flex items-center gap-2">
+              <span className="hidden items-center gap-2 px-2 font-mono text-[11px] tracking-tight text-faded sm:flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-verdigris" />
                 zero-knowledge
               </span>
               {clerkEnabled ? <AuthCorner /> : null}
             </span>
           </header>
-          <main className="flex-1 py-6">{children}</main>
-          <footer className="mt-8 border-t border-mist py-6">
-            <p className="max-w-prose text-xs leading-relaxed text-faded">
-              Everything is encrypted in your browser before upload. The key lives in the link
-              itself — after the <span className="font-mono text-ink">#</span> — and never reaches a
-              server, so we couldn&apos;t read your content if we wanted to.
+          <main className="flex flex-1 flex-col py-6">
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">{children}</div>
+          </main>
+          <footer className="mt-8 flex flex-col gap-3 border-t border-mist py-6 sm:flex-row sm:items-baseline sm:justify-between">
+            <p className="font-mono text-[11px] leading-relaxed tracking-tight text-faded">
+              encrypted in your browser · the key lives after the{" "}
+              <span className="text-ink">#</span> · the server stores only ciphertext
             </p>
+            <nav className="flex gap-4 font-mono text-[11px] tracking-tight">
+              <Link
+                href="/decode"
+                className="inline-flex min-h-6 items-center text-faded transition-colors hover:text-ink"
+              >
+                trace a leak
+              </Link>
+              <Link
+                href="/report"
+                className="inline-flex min-h-6 items-center text-faded transition-colors hover:text-ink"
+              >
+                report abuse
+              </Link>
+            </nav>
           </footer>
         </div>
       </body>

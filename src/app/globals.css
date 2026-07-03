@@ -7,13 +7,13 @@
   --pane: #e7e9e4; /* subtle fill / wells */
   --card: #ffffff; /* crisp cards on the ground */
   --ink: #14181a; /* cool near-black */
-  --faded: #656c6c; /* muted text */
-  --hush: #9aa19f; /* tertiary / placeholder */
-  --mist: #e0e3de; /* hairline borders */
-  --verdigris: #0d8a58; /* emerald signal */
-  --verdigris-deep: #0a6b45;
-  --wax: #cb4327; /* destructive */
-  --wax-deep: #a3331c;
+  --faded: #5d6464; /* muted text (AA at caption sizes) */
+  --hush: #636a68; /* tertiary / placeholder (AA on card AND pane) */
+  --mist: #d7dbd3; /* hairline borders — visible against card */
+  --verdigris: #0d8a58; /* emerald signal — fills, dots, large display only */
+  --verdigris-deep: #0a6b45; /* emerald for text sizes (AA) */
+  --wax: #cb4327; /* destructive fills */
+  --wax-deep: #a3331c; /* destructive text */
 }
 
 @theme inline {
@@ -28,9 +28,8 @@
   --color-verdigris-deep: var(--verdigris-deep);
   --color-wax: var(--wax);
   --color-wax-deep: var(--wax-deep);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-plex-mono);
-  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
   /* Softer, more modern corner language than the old 2px sharp. */
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
@@ -38,18 +37,28 @@
 }
 
 body {
+  /* A soft top wash, weak enough that the porcelain tint stays visible and
+     white cards read as objects on it rather than vanishing into it. */
   background:
-    radial-gradient(1200px 600px at 50% -10%, #ffffff 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(
+      1200px 600px at 50% -10%,
+      color-mix(in oklab, #ffffff 45%, transparent),
+      transparent 60%
+    ),
     var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Display face: tighten and set a confident optical scale. */
-.font-display {
-  letter-spacing: -0.02em;
-  font-weight: 600;
+/* Display face. Lives in the components layer so per-use utilities
+   (tracking-*, font-*) can still modulate it. */
+@layer components {
+  .font-display {
+    font-family: var(--font-space-grotesk), "Space Grotesk", var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
 }
 
 ::selection {
@@ -65,16 +74,26 @@ body {
 /* Soft card elevation used across panels. */
 .elevate {
   box-shadow:
-    0 1px 2px rgba(20, 24, 26, 0.05),
-    0 4px 16px -6px rgba(20, 24, 26, 0.08);
+    0 1px 2px rgba(20, 24, 26, 0.07),
+    0 8px 24px -8px rgba(20, 24, 26, 0.14);
 }
 
-/* The unfog reveal — sealed → legible, the app's signature moment. */
+/* Recessed well for machine output (ciphertext, links, logs) — the inverse
+   material of a raised card. */
+.well {
+  background: color-mix(in oklab, var(--pane) 60%, transparent);
+  box-shadow: inset 0 1px 2px rgba(20, 24, 26, 0.06);
+}
+
+/* ——— The fog arc: Wisp's signature motion. Content fogs when sealed,
+   holds fogged at the gate, unfogs on decrypt. ——— */
+
+/* Sealed → legible. The reveal. */
 @keyframes unfog {
   from {
     opacity: 0;
-    filter: blur(12px);
-    transform: translateY(4px);
+    filter: blur(16px);
+    transform: scale(1.01);
   }
   to {
     opacity: 1;
@@ -85,6 +104,36 @@ body {
 
 .unfog {
   animation: unfog 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Text variant — letters settle into place as they decrypt. */
+@keyframes unfog-text {
+  from {
+    opacity: 0;
+    filter: blur(16px);
+    letter-spacing: 0.05em;
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: normal;
+  }
+}
+
+.unfog-text {
+  animation: unfog-text 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Legible → sealed. The inverse, played while encrypting. */
+@keyframes fog {
+  to {
+    opacity: 0.4;
+    filter: blur(10px);
+  }
+}
+
+.fog {
+  animation: fog 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Quiet entrance for stacked content. */
@@ -105,7 +154,15 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .unfog,
-  .rise {
+  .unfog-text,
+  .rise,
+  .animate-pulse {
     animation: none;
+  }
+  /* Sealing still reads as "put away": same fogged end state, zero motion. */
+  .fog {
+    animation: none;
+    opacity: 0.55;
+    filter: blur(10px);
   }
 }

@@ -12,6 +12,8 @@ export interface ShareStatusDto {
   requiresIdentity: boolean;
   expired: boolean;
   exhausted: boolean;
+  /** Whether opening consumes one of a limited number of views (never the count). */
+  hasViewLimit: boolean;
 }
 
 export interface WatermarkDto {

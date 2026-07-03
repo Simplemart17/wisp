@@ -20,12 +20,14 @@ export async function GET(
     if (!share) return jsonResponse({ error: "Not found", kind: "gone" }, 404);
 
     let exhausted = isExhausted(share);
+    let hasViewLimit = share.viewsRemaining !== null;
     if (share.policy.requireIdentity) {
       const recipient = await getRecipientByLink(id);
       if (!recipient || recipient.revoked) {
         return jsonResponse({ error: "Not found", kind: "gone" }, 404);
       }
       exhausted = recipient.viewsRemaining !== null && recipient.viewsRemaining <= 0;
+      hasViewLimit = recipient.viewsRemaining !== null;
     }
 
     const status: ShareStatusDto = {
@@ -33,6 +35,7 @@ export async function GET(
       requiresIdentity: share.policy.requireIdentity,
       expired: isExpired(share),
       exhausted,
+      hasViewLimit,
     };
     return jsonResponse(status);
   } catch (error) {

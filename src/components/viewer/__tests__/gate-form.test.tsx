@@ -6,7 +6,7 @@ import { GateForm } from "../gate-form";
 
 function renderGate(gate: Partial<GatePhase>, overrides: Record<string, unknown> = {}) {
   const props = {
-    gate: { name: "gate", requiresPassword: false, requiresIdentity: false, otpSent: false, ...gate } as GatePhase,
+    gate: { name: "gate", requiresPassword: false, requiresIdentity: false, hasViewLimit: false, otpSent: false, ...gate } as GatePhase,
     email: "",
     setEmail: vi.fn(),
     code: "",
@@ -55,8 +55,13 @@ describe("GateForm", () => {
     expect(screen.getByRole("button", { name: /decrypt/i })).toBeEnabled();
   });
 
-  it("warns that opening may burn a view before first access", () => {
-    renderGate({});
-    expect(screen.getByRole("alert")).toHaveTextContent(/limited views/i);
+  it("cautions that opening burns a view — only when the share is view-limited", () => {
+    renderGate({ hasViewLimit: true });
+    expect(screen.getByText(/limited views/i)).toBeInTheDocument();
+  });
+
+  it("stays quiet about views for unlimited shares", () => {
+    renderGate({ hasViewLimit: false });
+    expect(screen.queryByText(/limited views/i)).toBeNull();
   });
 });

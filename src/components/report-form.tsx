@@ -29,7 +29,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
 
   if (state === "done") {
     return (
-      <section className="space-y-3">
+      <section className="my-auto space-y-3">
         <h1 className="font-display text-3xl">Report received.</h1>
         <p className="text-sm leading-relaxed text-faded">
           Thank you. Because content is end-to-end encrypted, we can&apos;t inspect it — but
@@ -42,7 +42,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
   return (
     <section className="space-y-5">
       <div>
-        <h1 className="font-display text-3xl">Report abuse.</h1>
+        <h1 className="font-display text-2xl tracking-[-0.015em]">Report abuse</h1>
         <p className="mt-2 text-sm leading-relaxed text-faded">
           Wisp can&apos;t see inside shares, so reports like yours are how abusive content gets
           taken down.{shareId ? " This report references the share you were viewing." : ""}
@@ -55,7 +55,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm focus:border-verdigris focus:outline-none"
+            className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm"
           >
             {REASONS.map((r) => (
               <option key={r.value} value={r.value}>
@@ -74,7 +74,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
             onChange={(e) => setDetails(e.target.value)}
             rows={4}
             maxLength={2000}
-            className="w-full rounded-sm border border-mist bg-card p-3 text-sm focus:border-verdigris focus:outline-none"
+            className="w-full rounded-sm border border-mist bg-card p-3 text-sm"
           />
         </label>
 
@@ -83,7 +83,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
         <button
           type="submit"
           disabled={state === "sending"}
-          className="rounded-sm bg-ink px-4 py-2.5 text-sm font-medium text-paper hover:bg-verdigris-deep disabled:opacity-60"
+          className="rounded-sm bg-ink px-4 py-2.5 text-sm font-medium text-paper transition-[background-color,transform] duration-150 hover:bg-verdigris-deep active:translate-y-px disabled:opacity-60"
         >
           {state === "sending" ? "Sending…" : "Send report"}
         </button>

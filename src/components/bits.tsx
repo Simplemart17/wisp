@@ -2,47 +2,117 @@
 
 import { useState } from "react";
 
+/**
+ * Honesty tiers (SPEC §1) encode guarantee strength by dot fill, not alarm
+ * color: solid emerald = math guarantees it, solid ink = our server refuses,
+ * hollow ring = the viewer app cooperates (a determined recipient can bypass).
+ */
 const TIER_DOT = {
   encrypted: "bg-verdigris",
-  "server-enforced": "bg-faded",
-  "client-honored": "bg-wax",
+  "server-enforced": "bg-ink/70",
+  "client-honored": "border border-ink/50 bg-transparent",
 } as const;
 
-/**
- * Honesty chips (SPEC §1): every control is labeled with the tier that
- * actually guarantees it, so the UI never promises more than it delivers.
- */
 export function TierChip({ tier }: { tier: keyof typeof TIER_DOT }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-mist bg-card/70 px-2 py-0.5 font-mono text-[10px] text-faded">
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-tight text-hush">
       <span className={`h-1.5 w-1.5 rounded-full ${TIER_DOT[tier]}`} />
       {tier}
     </span>
   );
 }
 
-export function CopyField({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** One-line definition of the three tiers — shown once, where policy is set. */
+export function TierLegend() {
+  return (
+    <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] leading-relaxed tracking-tight text-faded">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-verdigris" />
+        encrypted — math guarantees it
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-ink/70" />
+        server-enforced — our server refuses
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full border border-ink/50" />
+        client-honored — the viewer cooperates
+      </span>
+    </p>
+  );
+}
+
+/** The one label voice for section starts and field names — a register mark. */
+export function SectionLabel({
+  as: Tag = "span",
+  className = "",
+  children,
+}: {
+  as?: "span" | "h2" | "legend" | "dt";
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tag className={`font-mono text-[11px] uppercase tracking-[0.12em] text-hush ${className}`}>
+      {children}
+    </Tag>
+  );
+}
+
+export function CopyField({
+  label,
+  value,
+  hint,
+  primary = false,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  /** The sealed artifact itself — larger, emerald-edged, the page's hero. */
+  primary?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <div>
+      {/* Labels can be emails — mono register without forced uppercase. */}
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
-        <span className="font-mono text-xs text-faded">{label}</span>
-        {hint ? <span className="text-[11px] font-medium text-wax">{hint}</span> : null}
+        <span className="font-mono text-[11px] tracking-[0.08em] text-hush">{label}</span>
+        {hint ? (
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink/70">
+            {hint}
+          </span>
+        ) : null}
       </div>
-      <div className="group flex items-stretch overflow-hidden rounded-sm border border-mist bg-card focus-within:border-verdigris">
-        <code className="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-xs leading-5 text-ink">
+      <div
+        className={`group flex items-stretch overflow-hidden rounded-sm border transition-colors focus-within:border-verdigris ${
+          primary ? "border-verdigris/40 bg-verdigris/4" : "border-mist bg-card"
+        } ${copied ? "border-verdigris/60" : ""}`}
+      >
+        <code
+          className={`min-w-0 flex-1 truncate px-3 font-mono leading-5 text-ink ${
+            primary ? "py-3 text-[13px]" : "py-2.5 text-xs"
+          }`}
+        >
           {value}
         </code>
         <button
           type="button"
+          aria-label={`copy ${label}`}
           onClick={async () => {
             await navigator.clipboard.writeText(value);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="shrink-0 border-l border-mist px-3.5 font-mono text-xs font-medium text-ink transition-colors hover:bg-ink hover:text-paper"
+          className={`shrink-0 border-l px-3.5 font-mono text-xs font-medium transition-colors duration-200 ${
+            copied
+              ? "border-verdigris-deep bg-verdigris-deep text-white"
+              : `text-ink hover:bg-ink hover:text-paper ${primary ? "border-verdigris/40" : "border-mist"}`
+          }`}
         >
-          {copied ? "copied ✓" : "copy"}
+          <span aria-hidden>{copied ? "copied ✓" : "copy"}</span>
+          <span role="status" className="sr-only">
+            {copied ? `${label} copied` : ""}
+          </span>
         </button>
       </div>
     </div>
@@ -58,13 +128,14 @@ export function Notice({
 }) {
   const styles = {
     info: "border-mist bg-card/60 text-faded",
-    warn: "border-wax/25 bg-wax/[0.06] text-wax-deep",
+    // Advisory, not alarm — wax is reserved for destruction and failure.
+    warn: "border-ink/15 border-l-2 border-l-ink/60 bg-pane/70 text-ink/80",
     error: "border-wax/40 bg-wax/[0.09] text-wax-deep",
   }[tone];
-  // Errors/warnings are announced to assistive tech; info is polite.
+  // Only errors interrupt assistive tech; warnings and info are polite.
   return (
     <div
-      role={tone === "info" ? "status" : "alert"}
+      role={tone === "error" ? "alert" : "status"}
       className={`rounded-sm border px-3.5 py-3 text-sm leading-relaxed ${styles}`}
     >
       {children}
@@ -76,4 +147,27 @@ export function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** "in 7 days" / "3 hours ago" — the human answer to a timestamp question. */
+export function formatRelativeTime(date: Date, now: Date = new Date()): string {
+  const diffMs = date.getTime() - now.getTime();
+  const abs = Math.abs(diffMs);
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  let value: number;
+  let unit: string;
+  if (abs < HOUR) {
+    value = Math.max(1, Math.round(abs / MIN));
+    unit = "minute";
+  } else if (abs < DAY) {
+    value = Math.round(abs / HOUR);
+    unit = "hour";
+  } else {
+    value = Math.round(abs / DAY);
+    unit = "day";
+  }
+  const phrase = `${value} ${unit}${value === 1 ? "" : "s"}`;
+  return diffMs >= 0 ? `in ${phrase}` : `${phrase} ago`;
 }

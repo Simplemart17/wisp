@@ -18,7 +18,7 @@ export interface OpenedViewProps {
   shareId: string;
 }
 
-/** The decrypted content: canvas render (view-only/watermark) or a plain viewer. */
+/** The reveal: decrypted content unfogs first; everything else is a ledger line. */
 export function OpenedView({
   blob,
   metadata,
@@ -59,12 +59,13 @@ export function OpenedView({
     }
   }
 
+  const isPlainText = !useCanvas && metadata.type.startsWith("text/");
+
   return (
-    <section className="unfog space-y-4">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="min-w-0 truncate font-mono text-sm">{metadata.name}</h1>
-        <span className="shrink-0 font-mono text-xs text-faded">{formatBytes(metadata.size)}</span>
-      </div>
+    <section className="space-y-4">
+      <p className="rise font-mono text-[11px] uppercase tracking-[0.12em] text-verdigris-deep">
+        unsealed — decrypted locally
+      </p>
 
       {renderError ? <Notice tone="error">{renderError}</Notice> : null}
 
@@ -72,68 +73,82 @@ export function OpenedView({
         <div
           ref={hostRef}
           onContextMenu={(e) => viewOnly && e.preventDefault()}
-          className={`max-h-[70vh] space-y-3 overflow-auto ${viewOnly ? "select-none" : ""}`}
+          className={`unfog max-h-[70vh] space-y-3 overflow-auto [animation-delay:100ms] ${viewOnly ? "select-none" : ""}`}
         />
-      ) : metadata.type.startsWith("text/") ? (
+      ) : isPlainText ? (
         <TextBlock blob={blob} />
       ) : metadata.type.startsWith("image/") ? (
-        <MediaView blob={blob} type={metadata.type} name={metadata.name} kind="image" />
+        <div className="unfog [animation-delay:100ms]">
+          <MediaView blob={blob} type={metadata.type} name={metadata.name} kind="image" />
+        </div>
       ) : playable ? (
-        <MediaView
-          blob={blob}
-          type={metadata.type}
-          name={metadata.name}
-          kind={metadata.type.startsWith("audio/") ? "audio" : "video"}
-        />
+        <div className="unfog [animation-delay:100ms]">
+          <MediaView
+            blob={blob}
+            type={metadata.type}
+            name={metadata.name}
+            kind={metadata.type.startsWith("audio/") ? "audio" : "video"}
+          />
+        </div>
       ) : (
-        <div className="rounded-sm border border-mist bg-pane p-6 text-center text-sm text-faded">
+        <div className="unfog well rounded-sm border border-mist p-6 text-center text-sm text-faded [animation-delay:100ms]">
           This file type can&apos;t be previewed here — download it to open it.
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-4">
-        {viewOnly ? (
-          <span className="text-xs text-faded">
-            View-only: rendered {playable ? "for playback" : "to pixels"}, no download offered.
-            (This deters saving — it cannot stop screenshots or recordings.)
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void download()}
-            disabled={downloading}
-            className="rounded-sm border border-mist px-4 py-2 text-sm font-medium transition-colors hover:border-ink disabled:opacity-60"
+      <div className="rise space-y-3 [animation-delay:280ms]">
+        {remainingViews === 0 ? (
+          <p
+            role="status"
+            className="rounded-sm border border-wax/30 bg-wax/5 px-3.5 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-wax-deep"
           >
-            {downloading ? "Preparing…" : watermark ? "Download watermarked copy" : "Download"}
-          </button>
-        )}
-        {remainingViews !== null ? (
-          <span className="shrink-0 font-mono text-xs text-faded">
-            {remainingViews === 0
-              ? "that was the last view"
-              : `${remainingViews} view${remainingViews === 1 ? "" : "s"} left`}
-          </span>
+            burned — this link will not open again
+          </p>
         ) : null}
-      </div>
 
-      {watermark && useCanvas ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {viewOnly ? (
+            <span className="text-xs text-faded">
+              View-only: rendered {playable ? "for playback" : "to pixels"}, no download offered.
+              (This deters saving — it cannot stop screenshots or recordings.)
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void download()}
+              disabled={downloading}
+              className="rounded-sm border border-mist px-4 py-2 text-sm font-medium transition-colors hover:border-ink disabled:opacity-60"
+            >
+              {downloading ? "Preparing…" : watermark ? "Download watermarked copy" : "Download"}
+            </button>
+          )}
+          <span className="shrink-0 font-mono text-xs tracking-tight text-faded">
+            {metadata.name} · {formatBytes(metadata.size)}
+            {remainingViews !== null && remainingViews > 0
+              ? ` · ${remainingViews} view${remainingViews === 1 ? "" : "s"} left`
+              : ""}
+          </span>
+        </div>
+
+        {watermark && useCanvas ? (
+          <p className="text-xs leading-relaxed text-faded">
+            This rendering is watermarked to {watermark.email ?? "this link"} — a visible tile
+            {forensicEmbedded ? " plus an invisible forensic mark are" : " is"} burned into the
+            pixels, so copies stay traceable.
+          </p>
+        ) : watermark ? (
+          <p className="text-xs leading-relaxed text-faded">
+            A watermark was requested, but this content type can&apos;t be watermarked in the
+            viewer — the request is recorded, though no mark is burned into playback.
+          </p>
+        ) : null}
         <p className="text-xs leading-relaxed text-faded">
-          This rendering is watermarked to {watermark.email ?? "this link"} — a visible tile
-          {forensicEmbedded ? " plus an invisible forensic mark are" : " is"} burned into the
-          pixels, so copies stay traceable.
+          The plaintext never left your browser&apos;s memory.{" "}
+          <a href={`/report?share=${shareId}`} className="underline hover:text-ink">
+            Report abuse
+          </a>
         </p>
-      ) : watermark ? (
-        <p className="text-xs leading-relaxed text-faded">
-          A watermark was requested, but this content type can&apos;t be watermarked in the
-          viewer — the request is recorded, though no mark is burned into playback.
-        </p>
-      ) : null}
-      <p className="text-xs leading-relaxed text-faded">
-        Decrypted locally — the plaintext never left your browser&apos;s memory.{" "}
-        <a href={`/report?share=${shareId}`} className="underline hover:text-ink">
-          Report abuse
-        </a>
-      </p>
+      </div>
     </section>
   );
 }
@@ -151,7 +166,8 @@ function TextBlock({ blob }: { blob: Blob }) {
   }, [blob]);
   if (text === null) return null;
   return (
-    <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-sm border border-mist bg-card p-4 font-mono text-sm leading-relaxed">
+    // Letters settle into place as they decrypt — the unfog, spoken in text.
+    <pre className="unfog-text max-h-[60vh] overflow-auto rounded-sm border border-mist bg-card p-5 font-mono text-[15px] leading-relaxed whitespace-pre-wrap [animation-delay:100ms]">
       {text}
     </pre>
   );
