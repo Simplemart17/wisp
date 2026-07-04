@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Wisp mark: the header's ✦ sparkle on the ink rounded square. -->
+  <rect width="32" height="32" rx="7" fill="#14181a"/>
+  <path
+    d="M16 5.5 Q17.9 14.1 26.5 16 Q17.9 17.9 16 26.5 Q14.1 17.9 5.5 16 Q14.1 14.1 16 5.5 Z"
+    fill="#f0f1ee"
+  />
+</svg>
