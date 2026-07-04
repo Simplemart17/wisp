@@ -43,7 +43,10 @@ export function useCanvasRender(
       } else if (metadata.type.startsWith("image/")) {
         canvases = [await renderImageToCanvas(blob)];
       } else {
-        canvases = [renderTextToCanvas(await blob.text())];
+        // Rasterize text at the width it will be DISPLAYED at — drawn on a
+        // wider basis and squeezed by w-full, 15px type shrinks to ~8px.
+        const hostWidth = host.clientWidth;
+        canvases = [renderTextToCanvas(await blob.text(), hostWidth > 0 ? Math.max(320, hostWidth) : undefined)];
       }
       if (cancelled) return;
 
