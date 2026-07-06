@@ -252,9 +252,17 @@ export function decryptAccessedShare(
   });
 }
 
-/** Without a token, the request rides on the Clerk session cookie (owners). */
-export function fetchAudit(id: string, managementToken?: string): Promise<AuditReport> {
-  return requestJson<AuditReport>(`/api/shares/${id}/audit`, {
+/**
+ * Without a token, the request rides on the Clerk session cookie (owners).
+ * `before` (= a previous report's entriesNextCursor) pages older log entries.
+ */
+export function fetchAudit(
+  id: string,
+  managementToken?: string,
+  before?: string,
+): Promise<AuditReport> {
+  const qs = before ? `?before=${encodeURIComponent(before)}` : "";
+  return requestJson<AuditReport>(`/api/shares/${id}/audit${qs}`, {
     headers: managementToken ? { "x-management-token": managementToken } : undefined,
   });
 }

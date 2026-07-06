@@ -169,16 +169,30 @@ export async function addRecipientViews(
   return data as number | null;
 }
 
-export async function listOwnedShares(userId: string): Promise<ShareRecord[]> {
-  const { data, error } = await wispDb()
+/**
+ * One page of the owner's shares, newest first. `before` is the previous
+ * page's oldest created_at; `hasMore` is detected by over-fetching one row so
+ * the UI never shows a dead "Load more".
+ */
+export async function listOwnedShares(
+  userId: string,
+  page: { limit: number; before?: string },
+): Promise<{ shares: ShareRecord[]; hasMore: boolean }> {
+  let query = wispDb()
     .from("shares")
     .select("*")
     .eq("owner_user_id", userId)
     .is("parent_share_id", null)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(page.limit + 1);
+  if (page.before) query = query.lt("created_at", page.before);
+  const { data, error } = await query;
   if (error) throw new Error(`my shares read failed: ${error.message}`);
-  return (data ?? []).map((r) => toShareRecord(r as ShareRow));
+  const rows = (data ?? []) as ShareRow[];
+  return {
+    shares: rows.slice(0, page.limit).map(toShareRecord),
+    hasMore: rows.length > page.limit,
+  };
 }
 
 // ── Recipients ────────────────────────────────────────────────────────────

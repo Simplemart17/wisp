@@ -4,26 +4,22 @@ import { Show, SignInButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import type { MyShareDto, MySharesResponseDto } from "@/lib/shared/api";
 import { Notice } from "./bits";
 
-interface ShareSummary {
-  id: string;
-  createdAt: string;
-  expiresAt: string | null;
-  expired: boolean;
-  policy: {
-    maxViews: number | null;
-    password: boolean;
-    requireIdentity: boolean;
-    viewOnly: boolean;
-    watermark: boolean;
-  };
-}
+type ShareSummary = MyShareDto;
 
 type Phase =
   | { name: "loading" }
-  | { name: "loaded"; shares: ShareSummary[] }
+  | { name: "loaded"; shares: ShareSummary[]; nextCursor: string | null; loadingMore: boolean }
   | { name: "error"; message: string };
+
+async function fetchPage(before?: string): Promise<MySharesResponseDto> {
+  const qs = before ? `?before=${encodeURIComponent(before)}` : "";
+  const res = await fetch(`/api/my/shares${qs}`);
+  if (!res.ok) throw new Error(`Loading your shares failed (${res.status})`);
+  return (await res.json()) as MySharesResponseDto;
+}
 
 const DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 
@@ -66,16 +62,35 @@ function ShareList() {
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
 
   useEffect(() => {
-    fetch("/api/my/shares")
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Loading your shares failed (${res.status})`);
-        const body = (await res.json()) as { shares: ShareSummary[] };
-        setPhase({ name: "loaded", shares: body.shares });
-      })
+    fetchPage()
+      .then((body) =>
+        setPhase({
+          name: "loaded",
+          shares: body.shares,
+          nextCursor: body.nextCursor,
+          loadingMore: false,
+        }),
+      )
       .catch((err) =>
         setPhase({ name: "error", message: err instanceof Error ? err.message : "Failed." }),
       );
   }, []);
+
+  async function loadMore() {
+    if (phase.name !== "loaded" || !phase.nextCursor || phase.loadingMore) return;
+    setPhase({ ...phase, loadingMore: true });
+    try {
+      const body = await fetchPage(phase.nextCursor);
+      setPhase({
+        name: "loaded",
+        shares: [...phase.shares, ...body.shares],
+        nextCursor: body.nextCursor,
+        loadingMore: false,
+      });
+    } catch (err) {
+      setPhase({ name: "error", message: err instanceof Error ? err.message : "Failed." });
+    }
+  }
 
   if (phase.name === "loading") {
     return <p className="font-mono text-sm text-faded">Opening the ledger…</p>;
@@ -101,6 +116,7 @@ function ShareList() {
   }
 
   return (
+    <div className="space-y-2">
     <div className="overflow-x-auto rounded-sm border border-mist bg-card">
       <table className="w-full font-mono text-xs">
         <thead>
@@ -155,6 +171,17 @@ function ShareList() {
           })}
         </tbody>
       </table>
+    </div>
+    {phase.nextCursor ? (
+      <button
+        type="button"
+        disabled={phase.loadingMore}
+        onClick={() => void loadMore()}
+        className="rounded-sm border border-mist px-3 py-1.5 font-mono text-xs text-faded transition-colors hover:border-ink hover:text-ink disabled:opacity-50"
+      >
+        {phase.loadingMore ? "Loading…" : "Load older shares"}
+      </button>
+    ) : null}
     </div>
   );
 }

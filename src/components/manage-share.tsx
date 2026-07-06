@@ -38,6 +38,7 @@ export function ManageShare({ id }: { id: string }) {
   // single row's failure never replaces the whole ledger.
   const [confirmingLink, setConfirmingLink] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const tokenRef = useRef("");
 
   useEffect(() => {
@@ -89,6 +90,31 @@ export function ManageShare({ id }: { id: string }) {
   async function applyUpdate(update: ShareUpdate) {
     await updateShare(id, tokenRef.current || undefined, update);
     await refresh();
+  }
+
+  /** Append the next (older) page of log entries to the current report. */
+  async function loadOlderEntries() {
+    if (phase.name !== "loaded" || !phase.report.entriesNextCursor) return;
+    setLoadingOlder(true);
+    try {
+      const page = await fetchAudit(
+        id,
+        tokenRef.current || undefined,
+        phase.report.entriesNextCursor,
+      );
+      setPhase({
+        ...phase,
+        report: {
+          ...phase.report,
+          entries: [...phase.report.entries, ...page.entries],
+          entriesNextCursor: page.entriesNextCursor,
+        },
+      });
+    } catch (err) {
+      setRecipientError(err instanceof Error ? err.message : "Loading older entries failed.");
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   async function addRecipientViews(linkId: string) {
@@ -346,6 +372,16 @@ export function ManageShare({ id }: { id: string }) {
             </table>
           </div>
         )}
+        {report.entriesNextCursor ? (
+          <button
+            type="button"
+            disabled={loadingOlder}
+            onClick={() => void loadOlderEntries()}
+            className="mt-2 rounded-sm border border-mist px-3 py-1.5 font-mono text-xs text-faded transition-colors hover:border-ink hover:text-ink disabled:opacity-50"
+          >
+            {loadingOlder ? "Loading…" : "Load older entries"}
+          </button>
+        ) : null}
         <p className="mt-2 text-xs text-faded">
           Salted hashes — raw IP addresses are never stored.
         </p>

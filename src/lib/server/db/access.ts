@@ -181,15 +181,26 @@ export async function insertAccessLog(entry: {
   return (data as { id: number }).id;
 }
 
-export async function listAccessLog(shareId: string): Promise<AuditEntryRecord[]> {
-  const { data, error } = await wispDb()
+/**
+ * One page of the audit trail, newest first. `before` is the previous page's
+ * oldest ts; one extra row is fetched to signal `hasMore` (the old fixed
+ * limit(200) silently truncated busy shares' histories).
+ */
+export async function listAccessLog(
+  shareId: string,
+  page: { limit: number; before?: string },
+): Promise<{ entries: AuditEntryRecord[]; hasMore: boolean }> {
+  let query = wispDb()
     .from("access_log")
     .select("ts, ip_hash, user_agent, action, result, recipients(email_hint)")
     .eq("share_id", shareId)
     .order("ts", { ascending: false })
-    .limit(200);
+    .limit(page.limit + 1);
+  if (page.before) query = query.lt("ts", page.before);
+  const { data, error } = await query;
   if (error) throw new Error(`access_log read failed: ${error.message}`);
-  return (data ?? []).map((row) => {
+  const rows = data ?? [];
+  const entries = rows.slice(0, page.limit).map((row) => {
     const r = row as unknown as {
       ts: string;
       ip_hash: string | null;
@@ -207,4 +218,5 @@ export async function listAccessLog(shareId: string): Promise<AuditEntryRecord[]
       emailHint: r.recipients?.email_hint ?? null,
     };
   });
+  return { entries, hasMore: rows.length > page.limit };
 }
