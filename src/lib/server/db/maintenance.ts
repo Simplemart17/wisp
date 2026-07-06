@@ -22,6 +22,11 @@ export async function deleteStaleOtps(olderThanIso: string): Promise<void> {
   await wispDb().from("otp_codes").delete().lt("expires_at", olderThanIso);
 }
 
+/** GC for the durable rate-limit windows (largest live window is 10 min). */
+export async function deleteStaleRateLimits(olderThanIso: string): Promise<void> {
+  await wispDb().from("rate_limits").delete().lt("window_start", olderThanIso);
+}
+
 /** Parent shares that are expired or fully exhausted (anonymous maxViews=0). */
 export async function findSweepableShares(nowIso: string): Promise<
   Array<{ id: string; ciphertextRef: string }>

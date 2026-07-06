@@ -1,4 +1,9 @@
-import { deleteShares, deleteStaleOtps, findSweepableShares } from "@/lib/server/db/maintenance";
+import {
+  deleteShares,
+  deleteStaleOtps,
+  deleteStaleRateLimits,
+  findSweepableShares,
+} from "@/lib/server/db/maintenance";
 import { removeBlobs } from "@/lib/server/db/storage";
 import { env } from "@/lib/server/env";
 import { errorResponse, jsonResponse } from "@/lib/server/http";
@@ -23,8 +28,9 @@ export async function POST(req: Request): Promise<Response> {
       return jsonResponse({ error: "Not found", kind: null }, 404);
     }
 
-    // Stale OTP codes have no blob to clean — delete directly.
+    // Stale OTP codes and rate-limit windows have no blob to clean — delete directly.
     await deleteStaleOtps(new Date(Date.now() - 3600_000).toISOString());
+    await deleteStaleRateLimits(new Date(Date.now() - 3600_000).toISOString());
 
     const stale = await findSweepableShares(new Date().toISOString());
     if (stale.length > 0) {

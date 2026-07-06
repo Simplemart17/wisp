@@ -12,7 +12,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    enforceRateLimit(req, "shares", 20, 10 * 60 * 1000);
+    await enforceRateLimit(req, "shares", 20, 10 * 60 * 1000);
     const input = parseCreateShare(await readJsonBody(req));
     // Clerk-signed-in senders get share history (SPEC §5b); null = anonymous.
     const result = await createShare(input, await senderUserId());

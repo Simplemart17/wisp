@@ -19,7 +19,7 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    enforceRateLimit(req, "sign", 10, 10 * 60 * 1000);
+    await enforceRateLimit(req, "sign", 10, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     const { ticket, encryptedEnvelope } = body;

@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    enforceRateLimit(req, "status", 120, 10 * 60 * 1000);
+    await enforceRateLimit(req, "status", 120, 10 * 60 * 1000);
     const { id } = await params;
     const share = await getShare(id);
     if (!share) return jsonResponse({ error: "Not found", kind: "gone" }, 404);

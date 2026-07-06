@@ -17,7 +17,10 @@ export async function POST(
   try {
     const { id } = await params;
     const ip = clientIp(req);
-    if (!rateLimit(`access:${ip}`, 60, 10 * 60 * 1000) || !rateLimit(`access:${ip}:${id}`, 10, 60 * 1000)) {
+    if (
+      !(await rateLimit(`access:${ip}`, 60, 10 * 60 * 1000)) ||
+      !(await rateLimit(`access:${ip}:${id}`, 10, 60 * 1000))
+    ) {
       throw new ApiError(429, "Too many attempts, slow down");
     }
 

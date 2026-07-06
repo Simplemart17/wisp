@@ -24,7 +24,10 @@ export async function POST(
   try {
     const { id } = await params;
     const ip = clientIp(req);
-    if (!rateLimit(`otp:${ip}`, 10, 10 * 60 * 1000) || !rateLimit(`otp:${ip}:${id}`, 5, 10 * 60 * 1000)) {
+    if (
+      !(await rateLimit(`otp:${ip}`, 10, 10 * 60 * 1000)) ||
+      !(await rateLimit(`otp:${ip}:${id}`, 5, 10 * 60 * 1000))
+    ) {
       throw new ApiError(429, "Too many code requests, slow down");
     }
 

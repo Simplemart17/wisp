@@ -75,13 +75,13 @@ export function clientIp(req: Request): string {
  * IP. Throws a uniform 429 on trip. Centralizes the boilerplate that otherwise
  * repeats in every route.
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   req: Request,
   scope: string,
   maxRequests: number,
   windowMs: number,
-): void {
-  if (!rateLimit(`${scope}:${clientIp(req)}`, maxRequests, windowMs)) {
+): Promise<void> {
+  if (!(await rateLimit(`${scope}:${clientIp(req)}`, maxRequests, windowMs))) {
     throw new ApiError(429, "Too many requests, slow down");
   }
 }

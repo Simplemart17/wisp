@@ -14,7 +14,7 @@ const REASONS = new Set(["illegal", "malware", "phishing", "other"]);
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    enforceRateLimit(req, "report", 5, 10 * 60 * 1000);
+    await enforceRateLimit(req, "report", 5, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     if (typeof body.reason !== "string" || !REASONS.has(body.reason)) {

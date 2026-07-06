@@ -13,7 +13,7 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    enforceRateLimit(req, "audit", 30, 60 * 1000);
+    await enforceRateLimit(req, "audit", 30, 60 * 1000);
 
     const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
