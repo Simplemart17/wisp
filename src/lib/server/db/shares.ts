@@ -137,6 +137,38 @@ export async function deleteShare(id: string): Promise<void> {
   if (error) throw new Error(`share delete failed: ${error.message}`);
 }
 
+/** Move a parent share's expiry (child links resolve expiry from the parent). */
+export async function updateShareExpiry(id: string, expiresAtIso: string): Promise<void> {
+  const { error } = await wispDb()
+    .from("shares")
+    .update({ expires_at: expiresAtIso })
+    .eq("id", id)
+    .is("parent_share_id", null);
+  if (error) throw new Error(`share expiry update failed: ${error.message}`);
+}
+
+/** Atomic top-up of an anonymous share's counter; null = unlimited/no counter. */
+export async function addShareViews(id: string, n: number): Promise<number | null> {
+  const { data, error } = await wispDb().rpc("add_share_views", { p_share_id: id, p_n: n });
+  if (error) throw new Error(`add_share_views failed: ${error.message}`);
+  return data as number | null;
+}
+
+/** Atomic top-up of one recipient link's counter; null = no eligible link. */
+export async function addRecipientViews(
+  shareId: string,
+  linkId: string,
+  n: number,
+): Promise<number | null> {
+  const { data, error } = await wispDb().rpc("add_recipient_views", {
+    p_share_id: shareId,
+    p_link_id: linkId,
+    p_n: n,
+  });
+  if (error) throw new Error(`add_recipient_views failed: ${error.message}`);
+  return data as number | null;
+}
+
 export async function listOwnedShares(userId: string): Promise<ShareRecord[]> {
   const { data, error } = await wispDb()
     .from("shares")

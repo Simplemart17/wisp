@@ -1,5 +1,24 @@
-import { enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
-import { getRecipientByLink, getShare, isExhausted, isExpired } from "@/lib/server/shares";
+import { insertAccessLog } from "@/lib/server/db/access";
+import { addRecipientViews, addShareViews, updateShareExpiry } from "@/lib/server/db/shares";
+import {
+  ApiError,
+  clientIp,
+  enforceRateLimit,
+  errorResponse,
+  jsonResponse,
+  readJsonBody,
+} from "@/lib/server/http";
+import { EXPIRY_OPTIONS, parseUpdateShare } from "@/lib/server/policy";
+import {
+  getManageableParent,
+  getRecipientByLink,
+  getShare,
+  isExhausted,
+  isExpired,
+  requireManagementAccess,
+} from "@/lib/server/shares";
+import { hashIp } from "@/lib/server/tokens";
+import { toManagedShare } from "@/lib/server/views";
 import type { ShareStatusDto } from "@/lib/shared/api";
 
 export const runtime = "nodejs";
@@ -38,6 +57,65 @@ export async function GET(
       hasViewLimit,
     };
     return jsonResponse(status);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/**
+ * Post-create edits (SPEC §8), management-gated: extend the expiry window
+ * and/or top up view counters — the two most common "I set the policy too
+ * tight" fixes, neither of which should force re-encrypting and re-sending.
+ * The configured policy JSON stays immutable; only the live-state columns
+ * (expires_at, views_remaining) move.
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  try {
+    const { id } = await params;
+    await enforceRateLimit(req, "edit", 30, 60 * 1000);
+
+    const share = await getManageableParent(id);
+    await requireManagementAccess(req, share);
+    const update = parseUpdateShare(await readJsonBody(req));
+
+    if (update.addViews !== null) {
+      if (update.linkId !== null) {
+        if (!share.policy.requireIdentity) {
+          throw new ApiError(400, "This share has no recipient links");
+        }
+        const added = await addRecipientViews(id, update.linkId, update.addViews);
+        if (added === null) {
+          throw new ApiError(404, "No eligible recipient link (unknown, revoked, or unlimited)", "gone");
+        }
+      } else {
+        if (share.policy.requireIdentity) {
+          throw new ApiError(400, "Views are per recipient on this share — pass linkId");
+        }
+        const added = await addShareViews(id, update.addViews);
+        if (added === null) throw new ApiError(400, "This share already has unlimited views");
+      }
+    }
+
+    if (update.extendExpiry !== null) {
+      await updateShareExpiry(
+        id,
+        new Date(Date.now() + EXPIRY_OPTIONS[update.extendExpiry] * 1000).toISOString(),
+      );
+    }
+
+    await insertAccessLog({
+      shareId: id,
+      recipientId: null,
+      ipHash: hashIp(clientIp(req)),
+      userAgent: (req.headers.get("user-agent") ?? "").slice(0, 256),
+      action: "edit",
+      result: "allowed",
+    });
+
+    return jsonResponse(toManagedShare(await getManageableParent(id)));
   } catch (error) {
     return errorResponse(error);
   }
