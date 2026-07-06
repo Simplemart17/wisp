@@ -5,6 +5,7 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 
 import { env } from "./env";
+import { log } from "./log";
 
 function base64Url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -51,9 +52,9 @@ export function hashIp(ip: string): string {
   let salt = env.ipSalt;
   if (!salt) {
     if (!warnedNoIpSalt) {
-      console.warn(
-        "[wisp] WISP_IP_SALT is unset — using a random per-process salt. Audit IP hashes will not correlate across restarts or instances. Set WISP_IP_SALT in production.",
-      );
+      log.warn("tokens.no_ip_salt", {
+        hint: "using a random per-process salt; audit IP hashes will not correlate across restarts — set WISP_IP_SALT",
+      });
       warnedNoIpSalt = true;
     }
     salt = FALLBACK_IP_SALT;

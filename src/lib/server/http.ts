@@ -1,6 +1,7 @@
 /** Small helpers shared by all Route Handlers. */
 import type { ErrorKind } from "@/lib/shared/errors";
 import { env } from "./env";
+import { log } from "./log";
 import { rateLimit } from "./ratelimit";
 
 export class ApiError extends Error {
@@ -26,7 +27,7 @@ export function errorResponse(error: unknown): Response {
       status: error.status,
     });
   }
-  console.error("[wisp] unhandled API error:", error);
+  log.error("api.unhandled", { error });
   return Response.json({ error: "Internal error", kind: null }, { status: 500 });
 }
 

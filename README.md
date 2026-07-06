@@ -85,6 +85,12 @@ docker run -p 3007:3007 \
 
 The image serves on port `3007` (override with `-e PORT=…`).
 
+Operational surface: `GET /api/health` round-trips to the database (200/503)
+— point container health checks and uptime monitors at it. In production the
+container refuses to boot when `SUPABASE_URL`/`SUPABASE_SECRET_KEY` are
+missing, and all server errors are emitted as one-line JSON events on stdout
+(`docker logs` or any log collector; grep for `"level":"error"`).
+
 Point it at any Supabase project — hosted or
 [self-hosted Supabase](https://supabase.com/docs/guides/self-hosting).
 

@@ -4,6 +4,7 @@
  */
 import { sendEmail } from "../email";
 import { ApiError } from "../http";
+import { log } from "../log";
 import { clearSignTicket, insertAccessLog, insertSignature } from "../db/access";
 import { findRecipientByLink } from "../db/shares";
 import { type ShareRecord, isExpired } from "../shares";
@@ -53,7 +54,7 @@ export async function submitSignature(share: ShareRecord, ctx: SignContext): Pro
       text:
         `${recipient.emailHint ?? "A recipient"} just signed the document in share ${parentId}.\n` +
         `Open the share link to verify the signature cryptographically, or the management link for the audit trail.`,
-    }).catch((err) => console.error("[wisp] sign notification failed:", err));
+    }).catch((err) => log.error("email.notify_sign_failed", { error: err, shareId: parentId }));
   }
 
   return { ok: true, signedAt: new Date().toISOString() };

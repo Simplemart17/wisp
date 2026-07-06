@@ -2,6 +2,7 @@
  * Access-flow data access: OTP codes, the access log, signatures, and the
  * per-recipient signing ticket.
  */
+import { log } from "../log";
 import { fromPgBytea, toPgBytea, wispDb } from "./client";
 
 // ── OTP codes ─────────────────────────────────────────────────────────────
@@ -174,7 +175,7 @@ export async function insertAccessLog(entry: {
     .select("id")
     .single();
   if (error) {
-    console.error("[wisp] failed to write access_log:", error.message);
+    log.error("audit.write_failed", { error: error.message, shareId: entry.shareId, action: entry.action });
     return null;
   }
   return (data as { id: number }).id;

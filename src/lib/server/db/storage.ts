@@ -3,6 +3,7 @@
  * Routes/services request signed URLs and deletions through here rather than
  * reaching into supabase-js Storage directly.
  */
+import { log } from "../log";
 import { CIPHERTEXT_BUCKET, wispDb } from "./client";
 
 export async function createSignedUploadUrl(path: string): Promise<{ path: string; url: string }> {
@@ -25,7 +26,7 @@ export async function createSignedDownloadUrl(path: string, ttlSeconds: number):
 export async function removeBlobs(paths: string[]): Promise<void> {
   if (paths.length === 0) return;
   const { error } = await wispDb().storage.from(CIPHERTEXT_BUCKET).remove(paths);
-  if (error) console.error("[wisp] blob delete failed:", error.message);
+  if (error) log.error("storage.blob_delete_failed", { error: error.message, count: paths.length });
 }
 
 /** Throwing variant for the revoke path, where a failed delete must abort. */
