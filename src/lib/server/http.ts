@@ -50,7 +50,7 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
  * which would let an attacker mint a fresh rate-limit bucket per request and
  * forge audit IP hashes. Trusted proxies append the real peer on the RIGHT, so
  * we read `WISP_TRUSTED_PROXY_DEPTH` hops in from the right (default 1 — one
- * trusted proxy such as Vercel's edge). Operators behind N proxies set N;
+ * trusted proxy such as Cloudflare). Operators behind N proxies set N;
  * self-hosters with no proxy set 0 to ignore XFF entirely.
  */
 export function clientIp(req: Request): string {

@@ -59,7 +59,10 @@ pnpm test               # vitest — crypto core, policy, forensic watermark
 pnpm typecheck && pnpm lint && pnpm build
 ```
 
-## Hosted deployment (Vercel + Supabase)
+## Supabase project setup
+
+The app runs wherever you deploy the container (below); it only needs a
+Supabase project (hosted or self-hosted) to point at:
 
 1. Create a Supabase project. Apply the schema:
    `supabase link --project-ref <ref> && supabase db push`
@@ -67,7 +70,9 @@ pnpm typecheck && pnpm lint && pnpm build
 2. Dashboard → **Settings → Data API → Exposed schemas**: add `wisp`.
 3. Create the private Storage bucket `wisp` (or let the app's first upload
    fail and create it by hand — private, ~50 MiB file limit on free tier).
-4. Deploy to Vercel with the env vars below.
+
+**On every deploy that adds a migration**, re-run `supabase db push` before
+rolling the new image — the container never applies migrations itself.
 
 ## Self-hosting
 
@@ -103,9 +108,24 @@ reachable exclusively through your Cloudflare hostname.
 
 Notes: behind Cloudflare the default `WISP_TRUSTED_PROXY_DEPTH=1` is correct.
 The Clerk publishable key is baked into the browser bundle at image build
-time, so changing it needs a rebuild (`up -d --build`). For the expiry
-sweeper, point pg_cron at `https://<your-hostname>/api/sweep` with your
-`WISP_SWEEP_SECRET` as the bearer token.
+time, so changing it needs a rebuild (`up -d --build`). Set HSTS at the
+Cloudflare edge too (SSL/TLS → Edge Certificates) if you want the preload
+flavor; the app already sends its own `Strict-Transport-Security` header.
+
+## Backups
+
+The Postgres rows and Storage blobs are ciphertext + policy metadata — useless
+without link keys, which only senders/recipients hold, so a leaked backup is
+not a content breach. But a *lost* database is unrecoverable by design (there
+is no plaintext to re-derive anything from), so:
+
+- **Hosted Supabase**: daily backups are automatic on paid plans (Database →
+  Backups); free-tier projects have none — export with `supabase db dump` on
+  a schedule if the audit/policy state matters to you.
+- **Storage blobs** are not covered by database backups. Shares are
+  short-lived by design (max 30-day expiry), so most operators can accept
+  losing in-flight blobs; mirror the `wisp` bucket with `rclone` if you can't.
+- **Self-hosted Supabase**: you own PITR/pg_dump; include `storage` volumes.
 
 ## Environment
 

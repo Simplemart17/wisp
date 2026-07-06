@@ -314,9 +314,9 @@ Enable **RLS** on all tables as defense-in-depth (even though `service_role` byp
 | Blob storage | **Supabase Storage** — private bucket, short-TTL `createSignedUrl` |
 | Sender auth (optional) | **Clerk** (dashboard, share history, cross-share audit) |
 | Recipient identity | **Custom OTP** — Edge Function + Resend (hashed codes, allowlist, rate-limited) |
-| Scheduled jobs | **pg_cron + pg_net** (expiry sweeper) |
+| Scheduled jobs | Compose sweeper sidecar → `POST /api/sweep` (pg_cron + pg_net also works) |
 | Transactional email | **Resend** (share links, notify-on-open) |
-| Deploy | Vercel + Supabase (hosted), or self-hosted Supabase + Next.js |
+| Deploy | Docker (standalone Next.js) behind a Cloudflare Tunnel, pointed at hosted or self-hosted Supabase |
 
 ---
 
