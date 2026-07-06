@@ -55,9 +55,15 @@ Emails (OTP codes, share links) print to the dev-server console unless
 `RESEND_API_KEY` is set.
 
 ```bash
-pnpm test               # vitest — crypto core, policy, forensic watermark
+pnpm test               # vitest — crypto core, stream chunking, policy, http, forensic watermark
 pnpm typecheck && pnpm lint && pnpm build
+pnpm test:e2e           # Playwright — real browser against the local stack
 ```
+
+The e2e suite drives the headline flow (encrypt → gate → decrypt, burn-after-
+read, wrong-password retry, view top-up, revoke) in Chromium. It needs the
+local Supabase running (`supabase start`; re-run `supabase migration up`
+after pulling new migrations) and starts `pnpm dev` itself if none is up.
 
 ## Supabase project setup
 

@@ -49,3 +49,7 @@ next-env.d.ts
 .claude/scheduled_tasks.lock
 
 .history
+
+# Playwright
+/test-results/
+/playwright-report/
