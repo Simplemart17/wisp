@@ -1,8 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Notice } from "../bits";
 import { FoggedPane } from "./fogged-pane";
 import type { GatePhase } from "./use-share-access";
+
+/** Seconds before "Resend code" re-enables — the email genuinely takes a
+    moment to arrive, and repeat-clicks invalidate the code just sent. */
+const RESEND_COOLDOWN_S = 30;
 
 export interface GateFormProps {
   gate: GatePhase;
@@ -30,6 +36,13 @@ export function GateForm({
 }: GateFormProps) {
   const identityIncomplete = gate.requiresIdentity && (!gate.otpSent || !/^\d{6}$/.test(code));
   const ready = !identityIncomplete && (!gate.requiresPassword || password.length > 0);
+
+  const [cooldown, setCooldown] = useState(0);
+  useEffect(() => {
+    if (cooldown === 0) return;
+    const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   return (
     <section className="rise group my-auto space-y-5">
@@ -78,11 +91,18 @@ export function GateForm({
                 />
                 <button
                   type="button"
-                  onClick={onSendCode}
-                  disabled={!email.includes("@")}
-                  className="shrink-0 rounded-sm border border-mist px-3 py-2 text-sm transition-colors hover:border-ink disabled:opacity-50"
+                  onClick={() => {
+                    onSendCode();
+                    setCooldown(RESEND_COOLDOWN_S);
+                  }}
+                  disabled={!email.includes("@") || cooldown > 0}
+                  className="shrink-0 rounded-sm border border-mist px-3 py-2 text-sm tabular-nums transition-colors hover:border-ink disabled:opacity-50"
                 >
-                  {gate.otpSent ? "Resend code" : "Email me a code"}
+                  {cooldown > 0
+                    ? `Resend in ${cooldown}s`
+                    : gate.otpSent
+                      ? "Resend code"
+                      : "Email me a code"}
                 </button>
               </div>
               <span className="mt-1 block text-xs text-faded">
