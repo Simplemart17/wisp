@@ -39,3 +39,21 @@ services:
     depends_on:
       app:
         condition: service_healthy
+
+  # Expiry sweeper: without this, expired/exhausted ciphertext is never
+  # deleted and the "expiry bounds how long content is reachable" promise
+  # silently breaks. Hits POST /api/sweep every 5 minutes over the compose
+  # network — no pg_cron or external scheduler to remember.
+  sweeper:
+    image: curlimages/curl:latest
+    restart: unless-stopped
+    environment:
+      WISP_SWEEP_SECRET: ${WISP_SWEEP_SECRET:?Set WISP_SWEEP_SECRET in .env.deploy}
+    command: >-
+      sh -c 'while true; do
+      curl -fsS -X POST -H "Authorization: Bearer $$WISP_SWEEP_SECRET"
+      http://app:3007/api/sweep || echo "[sweeper] sweep request failed";
+      sleep 300; done'
+    depends_on:
+      app:
+        condition: service_healthy

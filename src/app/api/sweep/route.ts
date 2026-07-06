@@ -7,18 +7,17 @@ import {
 import { removeBlobs } from "@/lib/server/db/storage";
 import { env } from "@/lib/server/env";
 import { errorResponse, jsonResponse } from "@/lib/server/http";
+import { log } from "@/lib/server/log";
 import { sha256Base64Url, tokenMatchesHash } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
 
 /**
  * Expiry sweeper (SPEC §8): deletes blobs + rows for expired or exhausted
- * shares. Called by pg_cron via pg_net or any cron with the bearer secret.
- * Disabled (404) unless WISP_SWEEP_SECRET is set.
- *
- * NOTE: the exhaustion clause only matches ANONYMOUS shares (global maxViews
- * reaches 0). Identity shares track views per recipient and are reclaimed on
- * EXPIRY, not exhaustion (see db/maintenance.findSweepableShares).
+ * shares — identity shares count as exhausted once every recipient link is
+ * revoked or out of views. Driven by the compose `sweeper` sidecar (or any
+ * cron with the bearer secret). Disabled (404) unless WISP_SWEEP_SECRET is
+ * set.
  */
 export async function POST(req: Request): Promise<Response> {
   try {
@@ -32,10 +31,11 @@ export async function POST(req: Request): Promise<Response> {
     await deleteStaleOtps(new Date(Date.now() - 3600_000).toISOString());
     await deleteStaleRateLimits(new Date(Date.now() - 3600_000).toISOString());
 
-    const stale = await findSweepableShares(new Date().toISOString());
+    const stale = await findSweepableShares();
     if (stale.length > 0) {
       await removeBlobs(stale.map((s) => s.ciphertextRef));
       await deleteShares(stale.map((s) => s.id));
+      log.info("sweep.reclaimed", { shares: stale.length });
     }
 
     return jsonResponse({ swept: stale.length });

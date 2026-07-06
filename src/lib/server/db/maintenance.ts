@@ -27,22 +27,19 @@ export async function deleteStaleRateLimits(olderThanIso: string): Promise<void>
   await wispDb().from("rate_limits").delete().lt("window_start", olderThanIso);
 }
 
-/** Parent shares that are expired or fully exhausted (anonymous maxViews=0). */
-export async function findSweepableShares(nowIso: string): Promise<
+/**
+ * Parent shares that are expired or fully exhausted — including identity
+ * shares whose every recipient link is revoked or out of views (the
+ * find_sweepable_shares RPC owns the predicate).
+ */
+export async function findSweepableShares(): Promise<
   Array<{ id: string; ciphertextRef: string }>
 > {
-  const { data, error } = await wispDb()
-    .from("shares")
-    .select("id, ciphertext_ref")
-    .is("parent_share_id", null)
-    // views_remaining=0 matches only exhausted ANONYMOUS shares (identity
-    // shares track per-recipient counters and are reclaimed on expiry).
-    .or(`expires_at.lt.${nowIso},views_remaining.eq.0`)
-    .limit(500);
+  const { data, error } = await wispDb().rpc("find_sweepable_shares");
   if (error) throw new Error(`sweep query failed: ${error.message}`);
-  return (data ?? []).map((s) => ({
-    id: (s as { id: string }).id,
-    ciphertextRef: (s as { ciphertext_ref: string }).ciphertext_ref,
+  return ((data ?? []) as Array<{ id: string; ciphertext_ref: string }>).map((s) => ({
+    id: s.id,
+    ciphertextRef: s.ciphertext_ref,
   }));
 }
 

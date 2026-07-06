@@ -112,6 +112,10 @@ reachable exclusively through your Cloudflare hostname.
    docker compose --env-file .env.deploy up -d --build
    ```
 
+The compose file also runs a `sweeper` sidecar that POSTs `/api/sweep` every
+5 minutes (deleting expired/exhausted ciphertext), so no external scheduler
+is needed — `WISP_SWEEP_SECRET` is required in `.env.deploy`.
+
 Notes: behind Cloudflare the default `WISP_TRUSTED_PROXY_DEPTH=1` is correct.
 The Clerk publishable key is baked into the browser bundle at image build
 time, so changing it needs a rebuild (`up -d --build`). Set HSTS at the
