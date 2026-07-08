@@ -71,6 +71,24 @@ export function clientIp(req: Request): string {
 }
 
 /**
+ * Parse a `?before=` keyset cursor ("<iso-ts>|<row-id>", opaque to clients —
+ * they echo back a page's nextCursor verbatim). Returns undefined when
+ * absent; throws 400 when malformed. Callers validate the id's shape (bigint
+ * vs share id) since that differs per table.
+ */
+export function parseBeforeCursor(req: Request): { ts: string; id: string } | undefined {
+  const raw = new URL(req.url).searchParams.get("before");
+  if (raw === null) return undefined;
+  const split = raw.lastIndexOf("|");
+  const ts = split === -1 ? "" : raw.slice(0, split);
+  const id = split === -1 ? "" : raw.slice(split + 1);
+  if (!ts || !id || Number.isNaN(Date.parse(ts))) {
+    throw new ApiError(400, "before must be a cursor returned by a previous page");
+  }
+  return { ts, id };
+}
+
+/**
  * Per-request throttle: `maxRequests` per `windowMs` keyed by `scope` + client
  * IP. Throws a uniform 429 on trip. Centralizes the boilerplate that otherwise
  * repeats in every route.

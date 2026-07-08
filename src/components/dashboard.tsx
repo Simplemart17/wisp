@@ -60,6 +60,9 @@ export function Dashboard() {
 
 function ShareList() {
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
+  // Pagination failures stay local — a 429 on page 2 must never blank the
+  // ledger the user is already reading.
+  const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPage()
@@ -78,17 +81,25 @@ function ShareList() {
 
   async function loadMore() {
     if (phase.name !== "loaded" || !phase.nextCursor || phase.loadingMore) return;
+    setPageError(null);
     setPhase({ ...phase, loadingMore: true });
     try {
       const body = await fetchPage(phase.nextCursor);
-      setPhase({
-        name: "loaded",
-        shares: [...phase.shares, ...body.shares],
-        nextCursor: body.nextCursor,
-        loadingMore: false,
-      });
+      setPhase((current) =>
+        current.name === "loaded"
+          ? {
+              name: "loaded",
+              shares: [...current.shares, ...body.shares],
+              nextCursor: body.nextCursor,
+              loadingMore: false,
+            }
+          : current,
+      );
     } catch (err) {
-      setPhase({ name: "error", message: err instanceof Error ? err.message : "Failed." });
+      setPageError(err instanceof Error ? err.message : "Loading older shares failed.");
+      setPhase((current) =>
+        current.name === "loaded" ? { ...current, loadingMore: false } : current,
+      );
     }
   }
 
@@ -182,6 +193,7 @@ function ShareList() {
         {phase.loadingMore ? "Loading…" : "Load older shares"}
       </button>
     ) : null}
+    {pageError ? <Notice tone="error">{pageError}</Notice> : null}
     </div>
   );
 }

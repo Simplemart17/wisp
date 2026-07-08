@@ -95,20 +95,26 @@ export function ManageShare({ id }: { id: string }) {
   /** Append the next (older) page of log entries to the current report. */
   async function loadOlderEntries() {
     if (phase.name !== "loaded" || !phase.report.entriesNextCursor) return;
+    const cursor = phase.report.entriesNextCursor;
     setLoadingOlder(true);
     try {
-      const page = await fetchAudit(
-        id,
-        tokenRef.current || undefined,
-        phase.report.entriesNextCursor,
-      );
-      setPhase({
-        ...phase,
-        report: {
-          ...phase.report,
-          entries: [...phase.report.entries, ...page.entries],
-          entriesNextCursor: page.entriesNextCursor,
-        },
+      const page = await fetchAudit(id, tokenRef.current || undefined, cursor);
+      // Functional update guarded by the cursor we fetched with: if a
+      // refresh() (edit/revoke) replaced the report mid-flight, appending to
+      // it would clobber fresh state or duplicate rows — drop the page and
+      // let the user click again.
+      setPhase((current) => {
+        if (current.name !== "loaded" || current.report.entriesNextCursor !== cursor) {
+          return current;
+        }
+        return {
+          ...current,
+          report: {
+            ...current.report,
+            entries: [...current.report.entries, ...page.entries],
+            entriesNextCursor: page.entriesNextCursor,
+          },
+        };
       });
     } catch (err) {
       setRecipientError(err instanceof Error ? err.message : "Loading older entries failed.");
@@ -507,7 +513,9 @@ function AdjustPanel({
                 min={1}
                 max={100}
                 value={views}
-                onChange={(e) => setViews(Number.parseInt(e.target.value, 10) || 1)}
+                onChange={(e) =>
+                  setViews(Math.min(100, Math.max(1, Number.parseInt(e.target.value, 10) || 1)))
+                }
                 className={`w-20 text-center tabular-nums ${CONTROL}`}
               />
               <button

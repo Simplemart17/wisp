@@ -96,7 +96,7 @@ export interface AuditReportDto {
   share: ManagedShareDto;
   recipients: RecipientStatusDto[];
   entries: AuditEntryDto[];
-  /** Pass as ?before= to fetch the next (older) page; null = no more. */
+  /** Opaque cursor — pass as ?before= to fetch the next (older) page; null = no more. */
   entriesNextCursor: string | null;
 }
 
@@ -118,6 +118,6 @@ export interface MyShareDto {
 
 export interface MySharesResponseDto {
   shares: MyShareDto[];
-  /** Pass as ?before= to fetch the next (older) page; null = no more. */
+  /** Opaque cursor — pass as ?before= to fetch the next (older) page; null = no more. */
   nextCursor: string | null;
 }

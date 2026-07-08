@@ -51,7 +51,9 @@ export function toAuditReport(
       emailHint: e.emailHint,
     })),
     entriesNextCursor:
-      entriesHaveMore && entries.length > 0 ? entries[entries.length - 1].ts : null,
+      entriesHaveMore && entries.length > 0
+        ? `${entries[entries.length - 1].ts}|${entries[entries.length - 1].id}`
+        : null,
   };
 }
 

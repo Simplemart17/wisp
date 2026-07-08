@@ -146,6 +146,8 @@ export async function insertSignature(
 // ── Access log ──────────────────────────────────────────────────────────────
 
 export interface AuditEntryRecord {
+  /** Row id — the cursor tiebreaker; not exposed in DTOs. */
+  id: number;
   ts: string;
   ipHash: string | null;
   userAgent: string | null;
@@ -182,26 +184,32 @@ export async function insertAccessLog(entry: {
 }
 
 /**
- * One page of the audit trail, newest first. `before` is the previous page's
- * oldest ts; one extra row is fetched to signal `hasMore` (the old fixed
- * limit(200) silently truncated busy shares' histories).
+ * One page of the audit trail, newest first. Keyset-paged on (ts, id) — the
+ * id tiebreaker matters: ts alone is non-unique, and a strict ts cursor
+ * would silently skip rows sharing the boundary timestamp. One extra row is
+ * fetched to signal `hasMore`.
  */
 export async function listAccessLog(
   shareId: string,
-  page: { limit: number; before?: string },
+  page: { limit: number; before?: { ts: string; id: string } },
 ): Promise<{ entries: AuditEntryRecord[]; hasMore: boolean }> {
   let query = wispDb()
     .from("access_log")
-    .select("ts, ip_hash, user_agent, action, result, recipients(email_hint)")
+    .select("id, ts, ip_hash, user_agent, action, result, recipients(email_hint)")
     .eq("share_id", shareId)
     .order("ts", { ascending: false })
+    .order("id", { ascending: false })
     .limit(page.limit + 1);
-  if (page.before) query = query.lt("ts", page.before);
+  if (page.before) {
+    const { ts, id } = page.before;
+    query = query.or(`ts.lt."${ts}",and(ts.eq."${ts}",id.lt.${id})`);
+  }
   const { data, error } = await query;
   if (error) throw new Error(`access_log read failed: ${error.message}`);
   const rows = data ?? [];
   const entries = rows.slice(0, page.limit).map((row) => {
     const r = row as unknown as {
+      id: number;
       ts: string;
       ip_hash: string | null;
       user_agent: string | null;
@@ -210,6 +218,7 @@ export async function listAccessLog(
       recipients: { email_hint: string | null } | null;
     };
     return {
+      id: r.id,
       ts: r.ts,
       ipHash: r.ip_hash,
       userAgent: r.user_agent,

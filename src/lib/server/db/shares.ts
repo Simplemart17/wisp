@@ -170,13 +170,14 @@ export async function addRecipientViews(
 }
 
 /**
- * One page of the owner's shares, newest first. `before` is the previous
- * page's oldest created_at; `hasMore` is detected by over-fetching one row so
- * the UI never shows a dead "Load more".
+ * One page of the owner's shares, newest first. Keyset-paged on
+ * (created_at, id) — the id tiebreaker keeps equal-timestamp rows from being
+ * skipped across a page boundary. `hasMore` is detected by over-fetching one
+ * row so the UI never shows a dead "Load more".
  */
 export async function listOwnedShares(
   userId: string,
-  page: { limit: number; before?: string },
+  page: { limit: number; before?: { ts: string; id: string } },
 ): Promise<{ shares: ShareRecord[]; hasMore: boolean }> {
   let query = wispDb()
     .from("shares")
@@ -184,8 +185,12 @@ export async function listOwnedShares(
     .eq("owner_user_id", userId)
     .is("parent_share_id", null)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(page.limit + 1);
-  if (page.before) query = query.lt("created_at", page.before);
+  if (page.before) {
+    const { ts, id } = page.before;
+    query = query.or(`created_at.lt."${ts}",and(created_at.eq."${ts}",id.lt."${id}")`);
+  }
   const { data, error } = await query;
   if (error) throw new Error(`my shares read failed: ${error.message}`);
   const rows = (data ?? []) as ShareRow[];

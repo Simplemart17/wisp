@@ -17,13 +17,25 @@ function serialize(value: unknown): unknown {
 
 function emit(level: Level, event: string, fields: Record<string, unknown>): void {
   if (process.env.NODE_ENV === "development") {
-    // Dev: keep the console human-readable.
-    console[level](`[wisp] ${event}`, ...Object.entries(fields).map(([k, v]) => `${k}=${v}`));
+    // Dev: human-readable — pass Error values through untouched so the
+    // console prints their stack, not just "Error: message".
+    console[level](
+      `[wisp] ${event}`,
+      ...Object.entries(fields).map(([k, v]) => (v instanceof Error ? v : `${k}=${v}`)),
+    );
     return;
   }
   const entry: Record<string, unknown> = { ts: new Date().toISOString(), level, event };
   for (const [key, value] of Object.entries(fields)) entry[key] = serialize(value);
-  console[level](JSON.stringify(entry));
+  // The logger sits inside every catch-all — it must never throw itself
+  // (circular values, BigInt) or it replaces the clean 500 AND loses the log.
+  let line: string;
+  try {
+    line = JSON.stringify(entry);
+  } catch {
+    line = JSON.stringify({ ts: entry.ts, level, event, unserializable: true });
+  }
+  console[level](line);
 }
 
 export const log = {

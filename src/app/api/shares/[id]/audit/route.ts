@@ -1,6 +1,12 @@
 import { listAccessLog, listSignatureTimes } from "@/lib/server/db/access";
 import { listRecipientStatus } from "@/lib/server/db/shares";
-import { ApiError, enforceRateLimit, errorResponse, jsonResponse } from "@/lib/server/http";
+import {
+  ApiError,
+  enforceRateLimit,
+  errorResponse,
+  jsonResponse,
+  parseBeforeCursor,
+} from "@/lib/server/http";
 import { getManageableParent, requireManagementAccess } from "@/lib/server/shares";
 import { toAuditReport } from "@/lib/server/views";
 
@@ -24,14 +30,14 @@ export async function GET(
     const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
 
-    const beforeParam = new URL(req.url).searchParams.get("before");
-    if (beforeParam !== null && Number.isNaN(Date.parse(beforeParam))) {
-      throw new ApiError(400, "before must be an ISO timestamp");
+    const before = parseBeforeCursor(req);
+    if (before && !/^\d+$/.test(before.id)) {
+      throw new ApiError(400, "before must be a cursor returned by a previous page");
     }
 
     const { entries, hasMore } = await listAccessLog(id, {
       limit: ENTRIES_PAGE_SIZE,
-      before: beforeParam ?? undefined,
+      before,
     });
     const recipients = share.policy.requireIdentity ? await listRecipientStatus(id) : [];
     const signedAt = share.policy.requireSignature
