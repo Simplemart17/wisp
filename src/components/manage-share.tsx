@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { type AuditReport, ShareApiError, fetchAudit, revokeShare } from "@/lib/client/shares";
+import {
+  type AuditReport,
+  ShareApiError,
+  type ShareUpdate,
+  fetchAudit,
+  revokeShare,
+  updateShare,
+} from "@/lib/client/shares";
+import type { ExpiryChoice } from "@/lib/shared/policy";
 import { Notice, SectionLabel, formatRelativeTime } from "./bits";
 
 type Phase =
@@ -30,6 +38,7 @@ export function ManageShare({ id }: { id: string }) {
   // single row's failure never replaces the whole ledger.
   const [confirmingLink, setConfirmingLink] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const tokenRef = useRef("");
 
   useEffect(() => {
@@ -61,16 +70,65 @@ export function ManageShare({ id }: { id: string }) {
     }
   }
 
+  async function refresh() {
+    const report = await fetchAudit(id, tokenRef.current || undefined);
+    setPhase({ name: "loaded", report, confirming: false, revoking: false });
+  }
+
   async function revokeRecipient(linkId: string) {
     if (phase.name !== "loaded") return;
     setConfirmingLink(null);
     setRecipientError(null);
     try {
       await revokeShare(id, tokenRef.current || undefined, linkId);
-      const report = await fetchAudit(id, tokenRef.current || undefined);
-      setPhase({ name: "loaded", report, confirming: false, revoking: false });
+      await refresh();
     } catch (err) {
       setRecipientError(err instanceof Error ? err.message : "Revoking the recipient failed.");
+    }
+  }
+
+  async function applyUpdate(update: ShareUpdate) {
+    await updateShare(id, tokenRef.current || undefined, update);
+    await refresh();
+  }
+
+  /** Append the next (older) page of log entries to the current report. */
+  async function loadOlderEntries() {
+    if (phase.name !== "loaded" || !phase.report.entriesNextCursor) return;
+    const cursor = phase.report.entriesNextCursor;
+    setLoadingOlder(true);
+    try {
+      const page = await fetchAudit(id, tokenRef.current || undefined, cursor);
+      // Functional update guarded by the cursor we fetched with: if a
+      // refresh() (edit/revoke) replaced the report mid-flight, appending to
+      // it would clobber fresh state or duplicate rows — drop the page and
+      // let the user click again.
+      setPhase((current) => {
+        if (current.name !== "loaded" || current.report.entriesNextCursor !== cursor) {
+          return current;
+        }
+        return {
+          ...current,
+          report: {
+            ...current.report,
+            entries: [...current.report.entries, ...page.entries],
+            entriesNextCursor: page.entriesNextCursor,
+          },
+        };
+      });
+    } catch (err) {
+      setRecipientError(err instanceof Error ? err.message : "Loading older entries failed.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
+  async function addRecipientViews(linkId: string) {
+    setRecipientError(null);
+    try {
+      await applyUpdate({ addViews: 5, linkId });
+    } catch (err) {
+      setRecipientError(err instanceof Error ? err.message : "Adding views failed.");
     }
   }
 
@@ -172,6 +230,11 @@ export function ManageShare({ id }: { id: string }) {
         </div>
       </dl>
 
+      <AdjustPanel
+        canAddViews={!s.requiresIdentity && s.remainingViews !== null}
+        onApply={applyUpdate}
+      />
+
       {s.requiresIdentity && report.recipients.length > 0 ? (
         <div>
           <SectionLabel as="h2" className="mb-2 block">
@@ -238,13 +301,24 @@ export function ManageShare({ id }: { id: string }) {
                             </button>
                           </>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingLink(r.linkId)}
-                            className="-my-2 inline-block px-2 py-2 text-wax-deep hover:underline"
-                          >
-                            revoke link…
-                          </button>
+                          <>
+                            {r.viewsRemaining !== null ? (
+                              <button
+                                type="button"
+                                onClick={() => void addRecipientViews(r.linkId)}
+                                className="-my-2 inline-block px-2 py-2 text-verdigris-deep hover:underline"
+                              >
+                                +5 views
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingLink(r.linkId)}
+                              className="-my-2 inline-block px-2 py-2 text-wax-deep hover:underline"
+                            >
+                              revoke link…
+                            </button>
+                          </>
                         )
                       ) : null}
                     </td>
@@ -304,6 +378,16 @@ export function ManageShare({ id }: { id: string }) {
             </table>
           </div>
         )}
+        {report.entriesNextCursor ? (
+          <button
+            type="button"
+            disabled={loadingOlder}
+            onClick={() => void loadOlderEntries()}
+            className="mt-2 rounded-sm border border-mist px-3 py-1.5 font-mono text-xs text-faded transition-colors hover:border-ink hover:text-ink disabled:opacity-50"
+          >
+            {loadingOlder ? "Loading…" : "Load older entries"}
+          </button>
+        ) : null}
         <p className="mt-2 text-xs text-faded">
           Salted hashes — raw IP addresses are never stored.
         </p>
@@ -346,5 +430,115 @@ export function ManageShare({ id }: { id: string }) {
         )}
       </div>
     </section>
+  );
+}
+
+const EXPIRY_LABELS: Array<{ value: ExpiryChoice; label: string }> = [
+  { value: "1h", label: "1 hour" },
+  { value: "24h", label: "24 hours" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+];
+
+/**
+ * Post-create adjustments: the two "policy was too tight" fixes that shouldn't
+ * force re-encrypting and re-sending. Identity shares top up views per
+ * recipient (in the table above), so the share-level control hides there.
+ */
+function AdjustPanel({
+  canAddViews,
+  onApply,
+}: {
+  canAddViews: boolean;
+  onApply: (update: ShareUpdate) => Promise<void>;
+}) {
+  const [expiry, setExpiry] = useState<ExpiryChoice>("7d");
+  const [views, setViews] = useState(5);
+  const [working, setWorking] = useState<"expiry" | "views" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(kind: "expiry" | "views", update: ShareUpdate) {
+    setWorking(kind);
+    setError(null);
+    try {
+      await onApply(update);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Updating the share failed.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  const CONTROL = "rounded-sm border border-mist bg-card px-3 py-2 text-sm";
+  const APPLY =
+    "rounded-sm border border-mist px-3 py-2 text-sm transition-colors hover:border-ink disabled:opacity-50";
+
+  return (
+    <div className="rounded-sm border border-mist bg-card/60 p-4">
+      <SectionLabel as="h2" className="mb-3 block">
+        Adjust
+      </SectionLabel>
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs text-faded">Extend expiry (from now)</span>
+          <div className="flex gap-2">
+            <select
+              value={expiry}
+              onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}
+              className={CONTROL}
+            >
+              {EXPIRY_LABELS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={working !== null}
+              onClick={() => void run("expiry", { extendExpiry: expiry })}
+              className={APPLY}
+            >
+              {working === "expiry" ? "Extending…" : "Extend"}
+            </button>
+          </div>
+        </label>
+
+        {canAddViews ? (
+          <label className="block">
+            <span className="mb-1 block text-xs text-faded">Add views</span>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={views}
+                onChange={(e) =>
+                  setViews(Math.min(100, Math.max(1, Number.parseInt(e.target.value, 10) || 1)))
+                }
+                className={`w-20 text-center tabular-nums ${CONTROL}`}
+              />
+              <button
+                type="button"
+                disabled={working !== null}
+                onClick={() => void run("views", { addViews: views })}
+                className={APPLY}
+              >
+                {working === "views" ? "Adding…" : "Add"}
+              </button>
+            </div>
+          </label>
+        ) : null}
+      </div>
+      {error ? (
+        <div className="mt-3">
+          <Notice tone="error">{error}</Notice>
+        </div>
+      ) : null}
+      <p className="mt-3 text-xs leading-relaxed text-faded">
+        Changes apply to every link on this share. Once expired or fully viewed, the encrypted
+        content is deleted within minutes and can&apos;t be revived — adjust before it lapses.
+      </p>
+    </div>
   );
 }

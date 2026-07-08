@@ -16,7 +16,7 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { id } = await params;
-    enforceRateLimit(req, "revoke", 10, 60 * 1000);
+    await enforceRateLimit(req, "revoke", 10, 60 * 1000);
 
     const share = await getManageableParent(id);
     await requireManagementAccess(req, share);

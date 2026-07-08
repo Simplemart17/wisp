@@ -70,8 +70,14 @@ export function OpenedView({
       {renderError ? <Notice tone="error">{renderError}</Notice> : null}
 
       {useCanvas ? (
+        // role="img" + label: canvas pixels are invisible to assistive tech,
+        // and view-only content deliberately has no text alternative (it would
+        // defeat the watermark/copy deterrence) — so say that honestly instead
+        // of leaving screen-reader users with unlabeled silence.
         <div
           ref={hostRef}
+          role="img"
+          aria-label={`Protected rendering of ${metadata.name}. This document is drawn as pixels for watermarking and cannot be read by a screen reader — ask the sender for an accessible copy if you need one.`}
           onContextMenu={(e) => viewOnly && e.preventDefault()}
           className={`unfog max-h-[70vh] space-y-3 overflow-auto [animation-delay:100ms] ${viewOnly ? "select-none" : ""}`}
         />

@@ -17,7 +17,13 @@ export async function POST(
   try {
     const { id } = await params;
     const ip = clientIp(req);
-    if (!rateLimit(`access:${ip}`, 60, 10 * 60 * 1000) || !rateLimit(`access:${ip}:${id}`, 10, 60 * 1000)) {
+    // Concurrent on purpose: two serial DB round trips would double the
+    // limiter's latency on the hottest recipient path.
+    const [ipOk, perShareOk] = await Promise.all([
+      rateLimit(`access:${ip}`, 60, 10 * 60 * 1000),
+      rateLimit(`access:${ip}:${id}`, 10, 60 * 1000),
+    ]);
+    if (!ipOk || !perShareOk) {
       throw new ApiError(429, "Too many attempts, slow down");
     }
 

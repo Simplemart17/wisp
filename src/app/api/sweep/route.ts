@@ -1,19 +1,14 @@
-import { deleteShares, deleteStaleOtps, findSweepableShares } from "@/lib/server/db/maintenance";
-import { removeBlobs } from "@/lib/server/db/storage";
 import { env } from "@/lib/server/env";
 import { errorResponse, jsonResponse } from "@/lib/server/http";
+import { runSweep } from "@/lib/server/services/sweep";
 import { sha256Base64Url, tokenMatchesHash } from "@/lib/server/tokens";
 
 export const runtime = "nodejs";
 
 /**
- * Expiry sweeper (SPEC §8): deletes blobs + rows for expired or exhausted
- * shares. Called by pg_cron via pg_net or any cron with the bearer secret.
- * Disabled (404) unless WISP_SWEEP_SECRET is set.
- *
- * NOTE: the exhaustion clause only matches ANONYMOUS shares (global maxViews
- * reaches 0). Identity shares track views per recipient and are reclaimed on
- * EXPIRY, not exhaustion (see db/maintenance.findSweepableShares).
+ * External trigger for the expiry sweeper — optional, for operators who
+ * prefer their own cron; production servers already sweep on an internal
+ * timer (boot.ts). Disabled (404) unless WISP_SWEEP_SECRET is set.
  */
 export async function POST(req: Request): Promise<Response> {
   try {
@@ -22,17 +17,7 @@ export async function POST(req: Request): Promise<Response> {
     if (!secret || !presented || !tokenMatchesHash(presented, sha256Base64Url(secret))) {
       return jsonResponse({ error: "Not found", kind: null }, 404);
     }
-
-    // Stale OTP codes have no blob to clean — delete directly.
-    await deleteStaleOtps(new Date(Date.now() - 3600_000).toISOString());
-
-    const stale = await findSweepableShares(new Date().toISOString());
-    if (stale.length > 0) {
-      await removeBlobs(stale.map((s) => s.ciphertextRef));
-      await deleteShares(stale.map((s) => s.id));
-    }
-
-    return jsonResponse({ swept: stale.length });
+    return jsonResponse({ swept: await runSweep() });
   } catch (error) {
     return errorResponse(error);
   }

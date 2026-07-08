@@ -137,16 +137,67 @@ export async function deleteShare(id: string): Promise<void> {
   if (error) throw new Error(`share delete failed: ${error.message}`);
 }
 
-export async function listOwnedShares(userId: string): Promise<ShareRecord[]> {
-  const { data, error } = await wispDb()
+/** Move a parent share's expiry (child links resolve expiry from the parent). */
+export async function updateShareExpiry(id: string, expiresAtIso: string): Promise<void> {
+  const { error } = await wispDb()
+    .from("shares")
+    .update({ expires_at: expiresAtIso })
+    .eq("id", id)
+    .is("parent_share_id", null);
+  if (error) throw new Error(`share expiry update failed: ${error.message}`);
+}
+
+/** Atomic top-up of an anonymous share's counter; null = unlimited/no counter. */
+export async function addShareViews(id: string, n: number): Promise<number | null> {
+  const { data, error } = await wispDb().rpc("add_share_views", { p_share_id: id, p_n: n });
+  if (error) throw new Error(`add_share_views failed: ${error.message}`);
+  return data as number | null;
+}
+
+/** Atomic top-up of one recipient link's counter; null = no eligible link. */
+export async function addRecipientViews(
+  shareId: string,
+  linkId: string,
+  n: number,
+): Promise<number | null> {
+  const { data, error } = await wispDb().rpc("add_recipient_views", {
+    p_share_id: shareId,
+    p_link_id: linkId,
+    p_n: n,
+  });
+  if (error) throw new Error(`add_recipient_views failed: ${error.message}`);
+  return data as number | null;
+}
+
+/**
+ * One page of the owner's shares, newest first. Keyset-paged on
+ * (created_at, id) — the id tiebreaker keeps equal-timestamp rows from being
+ * skipped across a page boundary. `hasMore` is detected by over-fetching one
+ * row so the UI never shows a dead "Load more".
+ */
+export async function listOwnedShares(
+  userId: string,
+  page: { limit: number; before?: { ts: string; id: string } },
+): Promise<{ shares: ShareRecord[]; hasMore: boolean }> {
+  let query = wispDb()
     .from("shares")
     .select("*")
     .eq("owner_user_id", userId)
     .is("parent_share_id", null)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .order("id", { ascending: false })
+    .limit(page.limit + 1);
+  if (page.before) {
+    const { ts, id } = page.before;
+    query = query.or(`created_at.lt."${ts}",and(created_at.eq."${ts}",id.lt."${id}")`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(`my shares read failed: ${error.message}`);
-  return (data ?? []).map((r) => toShareRecord(r as ShareRow));
+  const rows = (data ?? []) as ShareRow[];
+  return {
+    shares: rows.slice(0, page.limit).map(toShareRecord),
+    hasMore: rows.length > page.limit,
+  };
 }
 
 // ── Recipients ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 
 import { env } from "./env";
+import { log } from "./log";
 
 function base64Url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -51,9 +52,12 @@ export function hashIp(ip: string): string {
   let salt = env.ipSalt;
   if (!salt) {
     if (!warnedNoIpSalt) {
-      console.warn(
-        "[wisp] WISP_IP_SALT is unset — using a random per-process salt. Audit IP hashes will not correlate across restarts or instances. Set WISP_IP_SALT in production.",
-      );
+      // Production refuses to boot without the salt (boot.ts); this warning
+      // covers dev/test, where the fallback also degrades RATE-LIMIT keys to
+      // per-process scope, not just audit-hash correlation.
+      log.warn("tokens.no_ip_salt", {
+        hint: "using a random per-process salt; audit IP hashes and rate-limit buckets reset every restart — set WISP_IP_SALT",
+      });
       warnedNoIpSalt = true;
     }
     salt = FALLBACK_IP_SALT;

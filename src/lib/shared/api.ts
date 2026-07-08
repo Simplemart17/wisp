@@ -96,6 +96,8 @@ export interface AuditReportDto {
   share: ManagedShareDto;
   recipients: RecipientStatusDto[];
   entries: AuditEntryDto[];
+  /** Opaque cursor — pass as ?before= to fetch the next (older) page; null = no more. */
+  entriesNextCursor: string | null;
 }
 
 // ── My shares (dashboard) ────────────────────────────────────────────────────
@@ -112,4 +114,10 @@ export interface MyShareDto {
     viewOnly: boolean;
     watermark: boolean;
   };
+}
+
+export interface MySharesResponseDto {
+  shares: MyShareDto[];
+  /** Opaque cursor — pass as ?before= to fetch the next (older) page; null = no more. */
+  nextCursor: string | null;
 }

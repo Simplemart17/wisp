@@ -1,6 +1,7 @@
 /** Small helpers shared by all Route Handlers. */
 import type { ErrorKind } from "@/lib/shared/errors";
 import { env } from "./env";
+import { log } from "./log";
 import { rateLimit } from "./ratelimit";
 
 export class ApiError extends Error {
@@ -26,7 +27,7 @@ export function errorResponse(error: unknown): Response {
       status: error.status,
     });
   }
-  console.error("[wisp] unhandled API error:", error);
+  log.error("api.unhandled", { error });
   return Response.json({ error: "Internal error", kind: null }, { status: 500 });
 }
 
@@ -50,7 +51,7 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
  * which would let an attacker mint a fresh rate-limit bucket per request and
  * forge audit IP hashes. Trusted proxies append the real peer on the RIGHT, so
  * we read `WISP_TRUSTED_PROXY_DEPTH` hops in from the right (default 1 — one
- * trusted proxy such as Vercel's edge). Operators behind N proxies set N;
+ * trusted proxy such as Cloudflare). Operators behind N proxies set N;
  * self-hosters with no proxy set 0 to ignore XFF entirely.
  */
 export function clientIp(req: Request): string {
@@ -70,17 +71,35 @@ export function clientIp(req: Request): string {
 }
 
 /**
+ * Parse a `?before=` keyset cursor ("<iso-ts>|<row-id>", opaque to clients —
+ * they echo back a page's nextCursor verbatim). Returns undefined when
+ * absent; throws 400 when malformed. Callers validate the id's shape (bigint
+ * vs share id) since that differs per table.
+ */
+export function parseBeforeCursor(req: Request): { ts: string; id: string } | undefined {
+  const raw = new URL(req.url).searchParams.get("before");
+  if (raw === null) return undefined;
+  const split = raw.lastIndexOf("|");
+  const ts = split === -1 ? "" : raw.slice(0, split);
+  const id = split === -1 ? "" : raw.slice(split + 1);
+  if (!ts || !id || Number.isNaN(Date.parse(ts))) {
+    throw new ApiError(400, "before must be a cursor returned by a previous page");
+  }
+  return { ts, id };
+}
+
+/**
  * Per-request throttle: `maxRequests` per `windowMs` keyed by `scope` + client
  * IP. Throws a uniform 429 on trip. Centralizes the boilerplate that otherwise
  * repeats in every route.
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   req: Request,
   scope: string,
   maxRequests: number,
   windowMs: number,
-): void {
-  if (!rateLimit(`${scope}:${clientIp(req)}`, maxRequests, windowMs)) {
+): Promise<void> {
+  if (!(await rateLimit(`${scope}:${clientIp(req)}`, maxRequests, windowMs))) {
     throw new ApiError(429, "Too many requests, slow down");
   }
 }

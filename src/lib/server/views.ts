@@ -29,6 +29,7 @@ export function toAuditReport(
   recipients: Array<RecipientStatusRow & { id: string }>,
   entries: AuditEntryRecord[],
   signedAtByRecipient: Map<string, string>,
+  entriesHaveMore: boolean,
 ): AuditReportDto {
   const recipientDtos: RecipientStatusDto[] = recipients.map((r) => ({
     linkId: r.link_id,
@@ -49,6 +50,10 @@ export function toAuditReport(
       result: e.result,
       emailHint: e.emailHint,
     })),
+    entriesNextCursor:
+      entriesHaveMore && entries.length > 0
+        ? `${entries[entries.length - 1].ts}|${entries[entries.length - 1].id}`
+        : null,
   };
 }
 

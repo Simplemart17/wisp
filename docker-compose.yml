@@ -18,7 +18,9 @@ services:
     restart: unless-stopped
     env_file: .env.deploy
     healthcheck:
-      test: ["CMD", "wget", "-qO/dev/null", "http://127.0.0.1:3007/"]
+      # /api/health round-trips to the database, so a container with a dead or
+      # misconfigured Supabase reports unhealthy instead of serving 500s.
+      test: ["CMD", "wget", "-qO/dev/null", "http://127.0.0.1:3007/api/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s

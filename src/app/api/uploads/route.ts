@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  */
 export async function POST(req: Request): Promise<Response> {
   try {
-    enforceRateLimit(req, "uploads", 30, 10 * 60 * 1000);
+    await enforceRateLimit(req, "uploads", 30, 10 * 60 * 1000);
 
     const body = await readJsonBody(req);
     const size = body.size;

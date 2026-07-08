@@ -55,11 +55,20 @@ Emails (OTP codes, share links) print to the dev-server console unless
 `RESEND_API_KEY` is set.
 
 ```bash
-pnpm test               # vitest — crypto core, policy, forensic watermark
+pnpm test               # vitest — crypto core, stream chunking, policy, http, forensic watermark
 pnpm typecheck && pnpm lint && pnpm build
+pnpm test:e2e           # Playwright — real browser against the local stack
 ```
 
-## Hosted deployment (Vercel + Supabase)
+The e2e suite drives the headline flow (encrypt → gate → decrypt, burn-after-
+read, wrong-password retry, view top-up, revoke) in Chromium. It needs the
+local Supabase running (`supabase start`; re-run `supabase migration up`
+after pulling new migrations) and starts `pnpm dev` itself if none is up.
+
+## Supabase project setup
+
+The app runs wherever you deploy the container (below); it only needs a
+Supabase project (hosted or self-hosted) to point at:
 
 1. Create a Supabase project. Apply the schema:
    `supabase link --project-ref <ref> && supabase db push`
@@ -67,7 +76,9 @@ pnpm typecheck && pnpm lint && pnpm build
 2. Dashboard → **Settings → Data API → Exposed schemas**: add `wisp`.
 3. Create the private Storage bucket `wisp` (or let the app's first upload
    fail and create it by hand — private, ~50 MiB file limit on free tier).
-4. Deploy to Vercel with the env vars below.
+
+**On every deploy that adds a migration**, re-run `supabase db push` before
+rolling the new image — the container never applies migrations itself.
 
 ## Self-hosting
 
@@ -79,6 +90,15 @@ docker run -p 3007:3007 \
 ```
 
 The image serves on port `3007` (override with `-e PORT=…`).
+
+Operational surface: `GET /api/health` round-trips to the database — schema
+AND the rate-limit RPC, so a deploy that skipped a migration reports 503 —
+point container health checks and uptime monitors at it. In production the
+container refuses to boot when `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, or
+`WISP_IP_SALT` are missing, expired/exhausted ciphertext is reclaimed by an
+internal 5-minute sweeper (no external scheduler needed on any topology),
+and all server errors are emitted as one-line JSON events on stdout
+(`docker logs` or any log collector; grep for `"level":"error"`).
 
 Point it at any Supabase project — hosted or
 [self-hosted Supabase](https://supabase.com/docs/guides/self-hosting).
@@ -103,9 +123,24 @@ reachable exclusively through your Cloudflare hostname.
 
 Notes: behind Cloudflare the default `WISP_TRUSTED_PROXY_DEPTH=1` is correct.
 The Clerk publishable key is baked into the browser bundle at image build
-time, so changing it needs a rebuild (`up -d --build`). For the expiry
-sweeper, point pg_cron at `https://<your-hostname>/api/sweep` with your
-`WISP_SWEEP_SECRET` as the bearer token.
+time, so changing it needs a rebuild (`up -d --build`). Set HSTS at the
+Cloudflare edge too (SSL/TLS → Edge Certificates) if you want the preload
+flavor; the app already sends its own `Strict-Transport-Security` header.
+
+## Backups
+
+The Postgres rows and Storage blobs are ciphertext + policy metadata — useless
+without link keys, which only senders/recipients hold, so a leaked backup is
+not a content breach. But a *lost* database is unrecoverable by design (there
+is no plaintext to re-derive anything from), so:
+
+- **Hosted Supabase**: daily backups are automatic on paid plans (Database →
+  Backups); free-tier projects have none — export with `supabase db dump` on
+  a schedule if the audit/policy state matters to you.
+- **Storage blobs** are not covered by database backups. Shares are
+  short-lived by design (max 30-day expiry), so most operators can accept
+  losing in-flight blobs; mirror the `wisp` bucket with `rclone` if you can't.
+- **Self-hosted Supabase**: you own PITR/pg_dump; include `storage` volumes.
 
 ## Environment
 
@@ -115,9 +150,9 @@ sweeper, point pg_cron at `https://<your-hostname>/api/sweep` with your
 | `SUPABASE_SECRET_KEY` | yes | `sb_secret_…` key — server-side only |
 | `RESEND_API_KEY` | no | Real email delivery (console log otherwise) |
 | `WISP_EMAIL_FROM` | no | From address for outgoing mail |
-| `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log (random per-process if unset) |
+| `WISP_IP_SALT` | yes (production) | Stable salt for audit IP hashes + durable rate-limit keys; prod refuses to boot without it |
 | `WISP_TRUSTED_PROXY_DEPTH` | recommended | Trusted reverse-proxy count for spoof-resistant client IP (default 1) |
-| `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` (expiry cleanup via pg_cron) |
+| `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` for an external cron (prod sweeps internally every 5 min anyway) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | no | Enables optional sender accounts + "My shares" dashboard |
 | `CLERK_SECRET_KEY` | no | Server side of the Clerk integration |
 

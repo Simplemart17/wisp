@@ -14,10 +14,16 @@ import { concatBytes, fromBase64Url, randomBytes, toBase64Url, utf8Decode, utf8E
 import { WispCryptoError } from "@/lib/crypto/errors";
 import { maskEmail } from "@/lib/email-mask";
 
-export const SIGNATURE_VERSION = 1;
+export const SIGNATURE_VERSION = 2;
+// The key/AAD strings stay at v1 on purpose: they version the SEALING format
+// (unchanged), while payload.v versions the signed payload shape.
 const INFO_SIGNATURE_KEY = "wisp/v1/signature-key";
 const AAD_SIGNATURE = utf8Encode("wisp/v1/sig");
 const NONCE_LENGTH = GCM_NONCE_LENGTH;
+
+/** Raw PNG byte cap for the drawn mark — keeps the sealed envelope well under
+    the server's wire cap (sign route) with the JWK + signature riding along. */
+export const MAX_SIGNATURE_IMAGE_BYTES = 32 * 1024;
 
 export interface SignaturePayload {
   v: number;
@@ -26,6 +32,9 @@ export interface SignaturePayload {
   signerEmail: string;
   signerName: string; // typed full name — the e-signature act
   signedAt: string; // ISO timestamp (client clock; server stores its own too)
+  /** Optional hand-drawn mark (base64url PNG), covered by the ECDSA signature
+      like every other field. Absent on v1 envelopes. */
+  signatureImage?: string | null;
 }
 
 export interface SignatureEnvelope {
@@ -36,7 +45,7 @@ export interface SignatureEnvelope {
 
 /** Deterministic serialization so signer and verifier hash identical bytes. */
 export function canonicalPayloadBytes(payload: SignaturePayload): Uint8Array {
-  const ordered = {
+  const ordered: Record<string, unknown> = {
     v: payload.v,
     docHash: payload.docHash,
     linkId: payload.linkId,
@@ -44,6 +53,9 @@ export function canonicalPayloadBytes(payload: SignaturePayload): Uint8Array {
     signerName: payload.signerName,
     signedAt: payload.signedAt,
   };
+  // v1 envelopes were signed without this field — the canonical shape is
+  // version-gated so their signatures keep verifying byte-for-byte.
+  if (payload.v >= 2) ordered.signatureImage = payload.signatureImage ?? null;
   return utf8Encode(JSON.stringify(ordered));
 }
 
@@ -70,10 +82,15 @@ export interface CreateSignatureInput {
   linkId: string;
   signerEmail: string;
   signerName: string;
+  /** Optional hand-drawn mark as PNG bytes (from the signature pad). */
+  signatureImage?: Uint8Array | null;
 }
 
 /** Sign + seal. Returns the encrypted envelope ready for upload. */
 export async function createSignedEnvelope(input: CreateSignatureInput): Promise<Uint8Array> {
+  if (input.signatureImage && input.signatureImage.length > MAX_SIGNATURE_IMAGE_BYTES) {
+    throw new WispCryptoError("INVALID_FORMAT", "Drawn signature is too large");
+  }
   const payload: SignaturePayload = {
     v: SIGNATURE_VERSION,
     docHash: await hashDocument(input.document),
@@ -81,6 +98,7 @@ export async function createSignedEnvelope(input: CreateSignatureInput): Promise
     signerEmail: input.signerEmail,
     signerName: input.signerName.trim(),
     signedAt: new Date().toISOString(),
+    signatureImage: input.signatureImage?.length ? toBase64Url(input.signatureImage) : null,
   };
 
   const keyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
@@ -136,6 +154,20 @@ export function signatureIdentityMatches(
   return serverEmailHint !== null && maskEmail(payload.signerEmail) === serverEmailHint;
 }
 
+/**
+ * The drawn mark's PNG bytes for display, or null when absent or malformed.
+ * Bounded and decoded here so render code never touches raw payload fields.
+ */
+export function signatureImageBytes(payload: SignaturePayload): Uint8Array | null {
+  if (payload.v < 2 || !payload.signatureImage) return null;
+  try {
+    const bytes = fromBase64Url(payload.signatureImage);
+    return bytes.length > 0 && bytes.length <= MAX_SIGNATURE_IMAGE_BYTES ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Decrypt an envelope and verify it against the document the viewer holds. */
 export async function openAndVerifyEnvelope(
   cek: Uint8Array,
@@ -159,7 +191,9 @@ export async function openAndVerifyEnvelope(
   }
 
   const { payload } = envelope;
-  if (payload.v !== SIGNATURE_VERSION) {
+  // v1 (typed name only) and v2 (adds the drawn mark) both verify; the
+  // canonical bytes are version-gated above.
+  if (payload.v !== 1 && payload.v !== SIGNATURE_VERSION) {
     return { payload, valid: false, problem: "Unsupported signature version" };
   }
 

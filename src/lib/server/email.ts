@@ -5,6 +5,7 @@
  */
 
 import { env } from "./env";
+import { log } from "./log";
 
 export interface OutgoingEmail {
   to: string;
@@ -37,7 +38,11 @@ export async function sendEmail(email: OutgoingEmail): Promise<void> {
   if (!res.ok) {
     // Email failures must never leak whether an address exists (enumeration),
     // and share creation shouldn't die on a delivery hiccup — log and move on.
-    console.error(`[wisp] email send failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    // No recipient address in the log entry, for the same privacy reason.
+    log.error("email.send_failed", {
+      status: res.status,
+      body: (await res.text()).slice(0, 200),
+    });
   }
 }
 

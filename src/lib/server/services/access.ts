@@ -8,6 +8,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { AccessResponseDto } from "@/lib/shared/api";
 import { isValidEmail, normalizeEmail, sendEmail } from "../email";
 import { ApiError } from "../http";
+import { log as serverLog } from "../log";
 import {
   claimOtpAttempt,
   consumeOtp,
@@ -164,7 +165,7 @@ export async function accessShare(share: ShareRecord, ctx: AccessContext): Promi
       text:
         `Your share ${parentId} was just opened by ${who}.\n` +
         `Manage it (audit log, revoke) with your management link.`,
-    }).catch((err) => console.error("[wisp] notify-on-open failed:", err));
+    }).catch((err) => serverLog.error("email.notify_open_failed", { error: err, shareId: parentId }));
   }
 
   return {

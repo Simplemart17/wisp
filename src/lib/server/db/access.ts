@@ -2,6 +2,7 @@
  * Access-flow data access: OTP codes, the access log, signatures, and the
  * per-recipient signing ticket.
  */
+import { log } from "../log";
 import { fromPgBytea, toPgBytea, wispDb } from "./client";
 
 // ── OTP codes ─────────────────────────────────────────────────────────────
@@ -145,6 +146,8 @@ export async function insertSignature(
 // ── Access log ──────────────────────────────────────────────────────────────
 
 export interface AuditEntryRecord {
+  /** Row id — the cursor tiebreaker; not exposed in DTOs. */
+  id: number;
   ts: string;
   ipHash: string | null;
   userAgent: string | null;
@@ -174,22 +177,39 @@ export async function insertAccessLog(entry: {
     .select("id")
     .single();
   if (error) {
-    console.error("[wisp] failed to write access_log:", error.message);
+    log.error("audit.write_failed", { error: error.message, shareId: entry.shareId, action: entry.action });
     return null;
   }
   return (data as { id: number }).id;
 }
 
-export async function listAccessLog(shareId: string): Promise<AuditEntryRecord[]> {
-  const { data, error } = await wispDb()
+/**
+ * One page of the audit trail, newest first. Keyset-paged on (ts, id) — the
+ * id tiebreaker matters: ts alone is non-unique, and a strict ts cursor
+ * would silently skip rows sharing the boundary timestamp. One extra row is
+ * fetched to signal `hasMore`.
+ */
+export async function listAccessLog(
+  shareId: string,
+  page: { limit: number; before?: { ts: string; id: string } },
+): Promise<{ entries: AuditEntryRecord[]; hasMore: boolean }> {
+  let query = wispDb()
     .from("access_log")
-    .select("ts, ip_hash, user_agent, action, result, recipients(email_hint)")
+    .select("id, ts, ip_hash, user_agent, action, result, recipients(email_hint)")
     .eq("share_id", shareId)
     .order("ts", { ascending: false })
-    .limit(200);
+    .order("id", { ascending: false })
+    .limit(page.limit + 1);
+  if (page.before) {
+    const { ts, id } = page.before;
+    query = query.or(`ts.lt."${ts}",and(ts.eq."${ts}",id.lt.${id})`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(`access_log read failed: ${error.message}`);
-  return (data ?? []).map((row) => {
+  const rows = data ?? [];
+  const entries = rows.slice(0, page.limit).map((row) => {
     const r = row as unknown as {
+      id: number;
       ts: string;
       ip_hash: string | null;
       user_agent: string | null;
@@ -198,6 +218,7 @@ export async function listAccessLog(shareId: string): Promise<AuditEntryRecord[]
       recipients: { email_hint: string | null } | null;
     };
     return {
+      id: r.id,
       ts: r.ts,
       ipHash: r.ip_hash,
       userAgent: r.user_agent,
@@ -206,4 +227,5 @@ export async function listAccessLog(shareId: string): Promise<AuditEntryRecord[]
       emailHint: r.recipients?.email_hint ?? null,
     };
   });
+  return { entries, hasMore: rows.length > page.limit };
 }

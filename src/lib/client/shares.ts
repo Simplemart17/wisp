@@ -11,6 +11,7 @@ import type {
   WatermarkDto,
 } from "@/lib/shared/api";
 import type { ErrorKind } from "@/lib/shared/errors";
+import type { ExpiryChoice } from "@/lib/shared/policy";
 import { createEncryptedShareFromBlob, openEncryptedShareBlob } from "./stream-crypto";
 
 // Wire contracts live in @/lib/shared/api (shared with the server). Aliased
@@ -251,10 +252,43 @@ export function decryptAccessedShare(
   });
 }
 
-/** Without a token, the request rides on the Clerk session cookie (owners). */
-export function fetchAudit(id: string, managementToken?: string): Promise<AuditReport> {
-  return requestJson<AuditReport>(`/api/shares/${id}/audit`, {
+/**
+ * Without a token, the request rides on the Clerk session cookie (owners).
+ * `before` (= a previous report's entriesNextCursor) pages older log entries.
+ */
+export function fetchAudit(
+  id: string,
+  managementToken?: string,
+  before?: string,
+): Promise<AuditReport> {
+  const qs = before ? `?before=${encodeURIComponent(before)}` : "";
+  return requestJson<AuditReport>(`/api/shares/${id}/audit${qs}`, {
     headers: managementToken ? { "x-management-token": managementToken } : undefined,
+  });
+}
+
+export interface ShareUpdate {
+  /** New expiry window measured from now. */
+  extendExpiry?: ExpiryChoice;
+  /** Views to add to the live counter (1..100). */
+  addViews?: number;
+  /** Target one recipient link's counter (identity shares). */
+  linkId?: string;
+}
+
+/** Post-create edits — extend expiry / top up views. Management-gated. */
+export async function updateShare(
+  id: string,
+  managementToken: string | undefined,
+  update: ShareUpdate,
+): Promise<void> {
+  await requestJson(`/api/shares/${id}`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      ...(managementToken ? { "x-management-token": managementToken } : {}),
+    },
+    body: JSON.stringify(update),
   });
 }
 

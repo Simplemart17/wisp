@@ -7,7 +7,7 @@ import type { KdfParams } from "@/lib/crypto";
 import { POLICY_FLAGS, POLICY_VERSION, type SharePolicy } from "@/lib/shared/policy";
 import { isValidEmail, normalizeEmail } from "./email";
 import { ApiError } from "./http";
-import { BASE64URL_RE, base64UrlByteLength } from "./validation";
+import { BASE64URL_RE, SHARE_ID_RE, base64UrlByteLength } from "./validation";
 import { BLOB_PATH_RE } from "./tokens";
 import { MAX_ENCRYPTED_METADATA_BYTES } from "./supabase";
 
@@ -96,6 +96,47 @@ function parseRecipients(value: unknown): string[] {
     normalized.add(normalizeEmail(trimmed));
   }
   return [...normalized];
+}
+
+export interface ValidatedShareUpdate {
+  /** New expiry window measured from now; null = leave expiry alone. */
+  extendExpiry: keyof typeof EXPIRY_OPTIONS | null;
+  addViews: number | null;
+  /** Target one recipient link's counter (identity shares); null = share-level. */
+  linkId: string | null;
+}
+
+/** Post-create edits (PATCH /api/shares/:id) — management-gated by the route. */
+export function parseUpdateShare(body: Record<string, unknown>): ValidatedShareUpdate {
+  const hasExpiry = body.extendExpiry !== undefined && body.extendExpiry !== null;
+  const hasViews = body.addViews !== undefined && body.addViews !== null;
+  if (!hasExpiry && !hasViews) {
+    throw new ApiError(400, "Nothing to update — pass extendExpiry and/or addViews");
+  }
+  if (hasExpiry && (typeof body.extendExpiry !== "string" || !(body.extendExpiry in EXPIRY_OPTIONS))) {
+    throw new ApiError(400, `extendExpiry must be one of ${Object.keys(EXPIRY_OPTIONS).join(", ")}`);
+  }
+  if (
+    hasViews &&
+    (!Number.isInteger(body.addViews) ||
+      (body.addViews as number) < 1 ||
+      (body.addViews as number) > MAX_VIEWS_CAP)
+  ) {
+    throw new ApiError(400, `addViews must be an integer 1..${MAX_VIEWS_CAP}`);
+  }
+  let linkId: string | null = null;
+  if (body.linkId !== undefined && body.linkId !== null) {
+    if (!hasViews) throw new ApiError(400, "linkId only applies to addViews");
+    if (typeof body.linkId !== "string" || !SHARE_ID_RE.test(body.linkId)) {
+      throw new ApiError(400, "linkId is not a valid link id");
+    }
+    linkId = body.linkId;
+  }
+  return {
+    extendExpiry: hasExpiry ? (body.extendExpiry as keyof typeof EXPIRY_OPTIONS) : null,
+    addViews: hasViews ? (body.addViews as number) : null,
+    linkId,
+  };
 }
 
 export function parseCreateShare(body: Record<string, unknown>): ValidatedCreateShare {
