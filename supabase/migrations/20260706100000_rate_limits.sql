@@ -18,6 +18,10 @@ create table if not exists rate_limits (
 -- Stale windows are garbage-collected by the sweeper.
 create index if not exists rate_limits_window_start_idx on rate_limits (window_start);
 
+-- Defense-in-depth, matching every other wisp table: service_role (the only
+-- role with grants) bypasses RLS; anything else hits a closed door.
+alter table rate_limits enable row level security;
+
 -- Fixed-window counter, atomic under concurrency (the ON CONFLICT row lock
 -- serializes racing requests). Returns true while the window still has
 -- budget. Fixed windows admit up to 2x max across one boundary — an accepted
