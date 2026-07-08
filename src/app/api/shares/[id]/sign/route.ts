@@ -6,7 +6,9 @@ import { BASE64URL_RE } from "@/lib/server/validation";
 
 export const runtime = "nodejs";
 
-const MAX_ENVELOPE_BYTES = 8192;
+// Sized for a v2 envelope: payload + JWK + ECDSA signature plus an optional
+// hand-drawn PNG mark (≤32 KiB raw, base64url inside the sealed JSON).
+const MAX_ENVELOPE_BYTES = 49152;
 
 /**
  * Store a signature envelope (SPEC §9). Authorization is the single-use

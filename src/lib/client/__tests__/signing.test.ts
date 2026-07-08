@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { randomBytes } from "@/lib/crypto/encoding";
+import { concatBytes, randomBytes, toBase64Url, utf8Encode } from "@/lib/crypto/encoding";
 import {
+  MAX_SIGNATURE_IMAGE_BYTES,
+  canonicalPayloadBytes,
   createSignedEnvelope,
   maskEmail,
   openAndVerifyEnvelope,
   signatureIdentityMatches,
+  signatureImageBytes,
 } from "../signing";
 
 const cek = randomBytes(32);
@@ -96,6 +99,120 @@ describe("document signing", () => {
     expect(forged.valid).toBe(false);
     expect(forged.problem).toMatch(/signature check failed/);
   });
+});
+
+describe("drawn signature mark (payload v2)", () => {
+  // Stand-in for a PNG from the pad — the envelope treats it as opaque bytes.
+  const mark = randomBytes(4096);
+
+  it("round-trips the drawn mark inside the signed payload", async () => {
+    const sealed = await createSignedEnvelope({ ...input, signatureImage: mark });
+    const result = await openAndVerifyEnvelope(cek, sealed, document);
+    expect(result.valid).toBe(true);
+    expect(signatureImageBytes(result.payload)).toEqual(mark);
+  });
+
+  it("signs with a null mark when the pad is empty", async () => {
+    const sealed = await createSignedEnvelope(input);
+    const result = await openAndVerifyEnvelope(cek, sealed, document);
+    expect(result.valid).toBe(true);
+    expect(result.payload.signatureImage).toBeNull();
+    expect(signatureImageBytes(result.payload)).toBeNull();
+  });
+
+  it("a swapped drawn mark breaks the ECDSA signature", async () => {
+    // Reseal with a different image but the original signature — decryption
+    // succeeds (right CEK), verification must fail (payload changed).
+    const sealed = await createSignedEnvelope({ ...input, signatureImage: mark });
+    const aes = await sealingKey();
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: sealed.slice(0, 12) as BufferSource, additionalData: utf8Encode("wisp/v1/sig") as BufferSource },
+      aes,
+      sealed.slice(12) as BufferSource,
+    );
+    const envelope = JSON.parse(new TextDecoder().decode(plain));
+    envelope.payload.signatureImage = toBase64Url(randomBytes(4096));
+    const forged = await reseal(aes, envelope);
+
+    const result = await openAndVerifyEnvelope(cek, forged, document);
+    expect(result.valid).toBe(false);
+    expect(result.problem).toMatch(/signature check failed/);
+  });
+
+  it("rejects an oversized mark before signing", async () => {
+    const huge = randomBytes(MAX_SIGNATURE_IMAGE_BYTES + 1);
+    await expect(createSignedEnvelope({ ...input, signatureImage: huge })).rejects.toMatchObject({
+      code: "INVALID_FORMAT",
+    });
+  });
+
+  it("signatureImageBytes returns null for malformed or oversized payload fields", () => {
+    const base = { v: 2, docHash: "x", linkId: "l", signerEmail: "e", signerName: "n", signedAt: "t" };
+    expect(signatureImageBytes({ ...base, signatureImage: "!!not-base64url!!" })).toBeNull();
+    expect(
+      signatureImageBytes({ ...base, signatureImage: toBase64Url(randomBytes(MAX_SIGNATURE_IMAGE_BYTES + 1)) }),
+    ).toBeNull();
+    expect(signatureImageBytes({ ...base, v: 1 })).toBeNull();
+  });
+
+  it("still verifies a v1 envelope signed before the drawn mark existed", async () => {
+    // Hand-rolled v1: canonical shape WITHOUT signatureImage, sealed with the
+    // same primitives — pins backward compatibility of the wire format.
+    const payload = {
+      v: 1,
+      docHash: toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", await document.arrayBuffer()))),
+      linkId: input.linkId,
+      signerEmail: input.signerEmail,
+      signerName: input.signerName,
+      signedAt: new Date().toISOString(),
+    };
+    const keyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const signature = new Uint8Array(
+      await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        keyPair.privateKey,
+        canonicalPayloadBytes(payload) as BufferSource,
+      ),
+    );
+    const envelope = {
+      payload,
+      publicKeyJwk: await crypto.subtle.exportKey("jwk", keyPair.publicKey),
+      signature: toBase64Url(signature),
+    };
+    const sealed = await reseal(await sealingKey(), envelope);
+
+    const result = await openAndVerifyEnvelope(cek, sealed, document);
+    expect(result.valid).toBe(true);
+    expect(result.payload.v).toBe(1);
+    expect(signatureImageBytes(result.payload)).toBeNull();
+  });
+
+  async function sealingKey(): Promise<CryptoKey> {
+    const ikm = await crypto.subtle.importKey("raw", cek as BufferSource, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits(
+      { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: utf8Encode("wisp/v1/signature-key") },
+      ikm,
+      256,
+    );
+    return crypto.subtle.importKey("raw", bits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  }
+
+  async function reseal(aes: CryptoKey, envelope: unknown): Promise<Uint8Array> {
+    const nonce = randomBytes(12);
+    return concatBytes(
+      nonce,
+      new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: nonce as BufferSource, additionalData: utf8Encode("wisp/v1/sig") as BufferSource },
+          aes,
+          utf8Encode(JSON.stringify(envelope)) as BufferSource,
+        ),
+      ),
+    );
+  }
 });
 
 describe("signature identity binding", () => {

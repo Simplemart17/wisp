@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { type SigningState, ShareApiError, submitSignature } from "@/lib/client/shares";
 import {
+  type SignaturePayload,
   type VerifiedSignature,
   createSignedEnvelope,
   maskEmail,
   openAndVerifyEnvelope,
   signatureIdentityMatches,
+  signatureImageBytes,
 } from "@/lib/client/signing";
 import { fromBase64Url } from "@/lib/crypto";
 import { Notice } from "./bits";
+import { SignaturePad, type SignaturePadHandle } from "./viewer/signature-pad";
 
 interface SignaturesProps {
   cek: Uint8Array;
@@ -52,6 +55,7 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
   const [verified, setVerified] = useState<DisplaySignature[] | null>(null);
   const [name, setName] = useState("");
   const [phase, setPhase] = useState<SignPhase>({ name: "idle" });
+  const padRef = useRef<SignaturePadHandle>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,12 +91,15 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
     if (!signing.ticket || !signerEmail) return;
     setPhase({ name: "working" });
     try {
+      // Drawn mark is optional — an empty pad signs with the typed name alone.
+      const signatureImage = (await padRef.current?.toPngBytes()) ?? null;
       const envelope = await createSignedEnvelope({
         cek,
         document: blob,
         linkId,
         signerEmail,
         signerName: name,
+        signatureImage,
       });
       await submitSignature(linkId, signing.ticket, envelope);
       const own = await openAndVerifyEnvelope(cek, envelope, blob);
@@ -143,6 +150,14 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
                   <span className="font-mono text-xs text-faded">
                     ({sig.serverEmailHint ?? sig.verified.payload.signerEmail})
                   </span>
+                  {/* Drawn mark rides inside the signed payload — only shown
+                      when the ECDSA check passed, so it can't be swapped. */}
+                  {sig.verified.valid ? (
+                    <DrawnMark
+                      payload={sig.verified.payload}
+                      signerName={sig.verified.payload.signerName}
+                    />
+                  ) : null}
                   <span className="block text-xs text-faded">
                     {!sig.verified.valid
                       ? `INVALID: ${sig.verified.problem}`
@@ -173,6 +188,16 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
               className="w-full rounded-sm border border-mist bg-card px-3 py-2.5 font-display text-lg tracking-tight placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-hush"
             />
           </label>
+          <div>
+            <span className="mb-1 block text-sm">
+              Draw your signature <span className="text-faded">(optional)</span>
+            </span>
+            <SignaturePad ref={padRef} disabled={phase.name === "working"} />
+            <span className="mt-1 block text-xs text-faded">
+              The drawing is sealed into your signature alongside your typed name — the server
+              never sees it.
+            </span>
+          </div>
           {phase.name === "error" ? <Notice tone="error">{phase.message}</Notice> : null}
           <button
             type="button"
@@ -194,5 +219,29 @@ export function SigningPanel({ cek, blob, linkId, signerEmail, signing }: Signat
         <p className="text-xs text-faded">You have already signed this document.</p>
       ) : null}
     </div>
+  );
+}
+
+/** The hand-drawn mark from a verified envelope (v2+); renders nothing for v1
+    or image-less signatures. Bytes come pre-bounded from signatureImageBytes. */
+function DrawnMark({ payload, signerName }: { payload: SignaturePayload; signerName: string }) {
+  const url = useMemo(() => {
+    const bytes = signatureImageBytes(payload);
+    if (!bytes) return null;
+    return URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/png" }));
+  }, [payload]);
+  useEffect(() => {
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+  if (!url) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- decrypted blob URL, next/image can't optimize it
+    <img
+      src={url}
+      alt={`Hand-drawn signature of ${signerName}`}
+      className="my-1 block h-12 w-auto max-w-56 rounded-xs border border-mist/60 bg-card px-2 py-1"
+    />
   );
 }
