@@ -8,7 +8,12 @@ import { ApiError } from "./http";
 import { senderUserId } from "./sender-auth";
 import { tokenMatchesHash } from "./tokens";
 import type { ShareRecord } from "./db/shares";
-import { findManageableParent, findRecipientByLink, findShare } from "./db/shares";
+import {
+  findManageableParent,
+  findRecipientByLink,
+  findShare,
+  listRecipientStatus,
+} from "./db/shares";
 
 export type { ShareRecord, RecipientRecord } from "./db/shares";
 
@@ -28,6 +33,21 @@ export function isExpired(share: ShareRecord): boolean {
 /** Anonymous shares track the live counter in viewsRemaining; null = unlimited. */
 export function isExhausted(share: ShareRecord): boolean {
   return share.viewsRemaining !== null && share.viewsRemaining <= 0;
+}
+
+/**
+ * Whether the sweeper's exhaustion clause matches this parent share — i.e. no
+ * link (share-level or any recipient's) has views left. Mirrors the
+ * find_sweepable_shares predicate so edit guards and the sweeper agree on
+ * what "dead" means.
+ */
+export async function isFullyExhausted(share: ShareRecord): Promise<boolean> {
+  if (!share.policy.requireIdentity) return isExhausted(share);
+  const recipients = await listRecipientStatus(share.id);
+  return (
+    recipients.length > 0 &&
+    recipients.every((r) => r.views_remaining !== null && r.views_remaining <= 0)
+  );
 }
 
 /**

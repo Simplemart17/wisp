@@ -15,6 +15,7 @@ import {
   getShare,
   isExhausted,
   isExpired,
+  isFullyExhausted,
   requireManagementAccess,
 } from "@/lib/server/shares";
 import { hashIp } from "@/lib/server/tokens";
@@ -68,6 +69,12 @@ export async function GET(
  * tight" fixes, neither of which should force re-encrypting and re-sending.
  * The configured policy JSON stays immutable; only the live-state columns
  * (expires_at, views_remaining) move.
+ *
+ * Guards (review findings): "Extend" must never move expiry EARLIER (the
+ * sweeper would delete the share ahead of schedule); an edit that leaves the
+ * share dead anyway — views on an expired share, or an expiry bump on a
+ * fully-exhausted one — is rejected with instructions rather than reported
+ * as a success that revives nothing.
  */
 export async function PATCH(
   req: Request,
@@ -80,6 +87,33 @@ export async function PATCH(
     const share = await getManageableParent(id);
     await requireManagementAccess(req, share);
     const update = parseUpdateShare(await readJsonBody(req));
+
+    const newExpiresAt =
+      update.extendExpiry !== null
+        ? new Date(Date.now() + EXPIRY_OPTIONS[update.extendExpiry] * 1000).toISOString()
+        : null;
+    if (newExpiresAt !== null && share.expiresAt !== null && newExpiresAt <= share.expiresAt) {
+      throw new ApiError(
+        400,
+        "That window would shorten this share — it already expires later. Pick a longer window.",
+      );
+    }
+
+    if (update.addViews !== null && isExpired(share) && newExpiresAt === null) {
+      throw new ApiError(
+        400,
+        "This share has expired — extend its expiry in the same request to revive it.",
+      );
+    }
+
+    if (update.addViews === null && newExpiresAt !== null && (await isFullyExhausted(share))) {
+      // Extending alone leaves the share sweepable (exhaustion still matches);
+      // it would be deleted minutes later despite the "successful" edit.
+      throw new ApiError(
+        400,
+        "No views remain, so a new expiry alone won't keep this share — add views as well.",
+      );
+    }
 
     if (update.addViews !== null) {
       if (update.linkId !== null) {
@@ -99,11 +133,8 @@ export async function PATCH(
       }
     }
 
-    if (update.extendExpiry !== null) {
-      await updateShareExpiry(
-        id,
-        new Date(Date.now() + EXPIRY_OPTIONS[update.extendExpiry] * 1000).toISOString(),
-      );
+    if (newExpiresAt !== null) {
+      await updateShareExpiry(id, newExpiresAt);
     }
 
     await insertAccessLog({
