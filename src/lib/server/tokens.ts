@@ -52,8 +52,11 @@ export function hashIp(ip: string): string {
   let salt = env.ipSalt;
   if (!salt) {
     if (!warnedNoIpSalt) {
+      // Production refuses to boot without the salt (boot.ts); this warning
+      // covers dev/test, where the fallback also degrades RATE-LIMIT keys to
+      // per-process scope, not just audit-hash correlation.
       log.warn("tokens.no_ip_salt", {
-        hint: "using a random per-process salt; audit IP hashes will not correlate across restarts — set WISP_IP_SALT",
+        hint: "using a random per-process salt; audit IP hashes and rate-limit buckets reset every restart — set WISP_IP_SALT",
       });
       warnedNoIpSalt = true;
     }

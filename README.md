@@ -91,10 +91,13 @@ docker run -p 3007:3007 \
 
 The image serves on port `3007` (override with `-e PORT=…`).
 
-Operational surface: `GET /api/health` round-trips to the database (200/503)
-— point container health checks and uptime monitors at it. In production the
-container refuses to boot when `SUPABASE_URL`/`SUPABASE_SECRET_KEY` are
-missing, and all server errors are emitted as one-line JSON events on stdout
+Operational surface: `GET /api/health` round-trips to the database — schema
+AND the rate-limit RPC, so a deploy that skipped a migration reports 503 —
+point container health checks and uptime monitors at it. In production the
+container refuses to boot when `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, or
+`WISP_IP_SALT` are missing, expired/exhausted ciphertext is reclaimed by an
+internal 5-minute sweeper (no external scheduler needed on any topology),
+and all server errors are emitted as one-line JSON events on stdout
 (`docker logs` or any log collector; grep for `"level":"error"`).
 
 Point it at any Supabase project — hosted or
@@ -117,10 +120,6 @@ reachable exclusively through your Cloudflare hostname.
    cp .env.deploy.example .env.deploy   # fill in TUNNEL_TOKEN, Supabase, etc.
    docker compose --env-file .env.deploy up -d --build
    ```
-
-The compose file also runs a `sweeper` sidecar that POSTs `/api/sweep` every
-5 minutes (deleting expired/exhausted ciphertext), so no external scheduler
-is needed — `WISP_SWEEP_SECRET` is required in `.env.deploy`.
 
 Notes: behind Cloudflare the default `WISP_TRUSTED_PROXY_DEPTH=1` is correct.
 The Clerk publishable key is baked into the browser bundle at image build
@@ -151,9 +150,9 @@ is no plaintext to re-derive anything from), so:
 | `SUPABASE_SECRET_KEY` | yes | `sb_secret_…` key — server-side only |
 | `RESEND_API_KEY` | no | Real email delivery (console log otherwise) |
 | `WISP_EMAIL_FROM` | no | From address for outgoing mail |
-| `WISP_IP_SALT` | recommended | Salts hashed IPs in the audit log (random per-process if unset) |
+| `WISP_IP_SALT` | yes (production) | Stable salt for audit IP hashes + durable rate-limit keys; prod refuses to boot without it |
 | `WISP_TRUSTED_PROXY_DEPTH` | recommended | Trusted reverse-proxy count for spoof-resistant client IP (default 1) |
-| `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` (expiry cleanup via pg_cron) |
+| `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` for an external cron (prod sweeps internally every 5 min anyway) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | no | Enables optional sender accounts + "My shares" dashboard |
 | `CLERK_SECRET_KEY` | no | Server side of the Clerk integration |
 

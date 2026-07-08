@@ -6,6 +6,7 @@ export async function register(): Promise<void> {
   // The middleware bundle registers under the edge runtime too; env
   // validation only makes sense in the real Node server process.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { assertBootEnv } = await import("./lib/server/boot");
+  const { assertBootEnv, startSweeper } = await import("./lib/server/boot");
   assertBootEnv();
+  startSweeper();
 }
