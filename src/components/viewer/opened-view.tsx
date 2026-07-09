@@ -79,7 +79,7 @@ export function OpenedView({
           role="img"
           aria-label={`Protected rendering of ${metadata.name}. This document is drawn as pixels for watermarking and cannot be read by a screen reader — ask the sender for an accessible copy if you need one.`}
           onContextMenu={(e) => viewOnly && e.preventDefault()}
-          className={`unfog max-h-[70vh] space-y-3 overflow-auto [animation-delay:100ms] ${viewOnly ? "select-none" : ""}`}
+          className={`unfog max-h-[70svh] space-y-3 overflow-auto [animation-delay:100ms] ${viewOnly ? "select-none" : ""}`}
         />
       ) : isPlainText ? (
         <TextBlock blob={blob} />
@@ -173,7 +173,7 @@ function TextBlock({ blob }: { blob: Blob }) {
   if (text === null) return null;
   return (
     // Letters settle into place as they decrypt — the unfog, spoken in text.
-    <pre className="unfog-text max-h-[60vh] overflow-auto rounded-sm border border-mist bg-card p-5 font-mono text-[15px] leading-relaxed whitespace-pre-wrap [animation-delay:100ms]">
+    <pre className="unfog-text max-h-[60svh] overflow-auto rounded-sm border border-mist bg-card p-5 font-mono text-[15px] leading-relaxed whitespace-pre-wrap [animation-delay:100ms]">
       {text}
     </pre>
   );
@@ -200,9 +200,9 @@ function MediaView({
   }
   if (kind === "video") {
     return (
-      <video controls src={url} className="max-h-[60vh] w-full rounded-sm border border-mist bg-black" />
+      <video controls src={url} className="max-h-[60svh] w-full rounded-sm border border-mist bg-black" />
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- decrypted blob URL, next/image can't optimize it
-  return <img src={url} alt={name} className="max-h-[60vh] w-full rounded-sm border border-mist object-contain" />;
+  return <img src={url} alt={name} className="max-h-[60svh] w-full rounded-sm border border-mist object-contain" />;
 }

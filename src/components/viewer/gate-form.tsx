@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Notice } from "../bits";
+import { CONTROL, Notice } from "../bits";
 import { FoggedPane } from "./fogged-pane";
 import type { GatePhase } from "./use-share-access";
 
@@ -87,7 +87,7 @@ export function GateForm({
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   placeholder="you@example.com"
-                  className="min-w-0 flex-1 rounded-sm border border-mist bg-card px-3 py-2 text-sm placeholder:text-hush"
+                  className={`min-w-0 flex-1 px-3 py-2 placeholder:text-hush ${CONTROL}`}
                 />
                 <button
                   type="button"
@@ -137,7 +137,7 @@ export function GateForm({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="off"
-              className="w-full rounded-sm border border-mist bg-card px-3 py-2 text-sm"
+              className={`w-full px-3 py-2 ${CONTROL}`}
             />
             <span className="mt-1 block text-xs text-faded">
               The sender set a password. It combines with the link&apos;s key in your browser —

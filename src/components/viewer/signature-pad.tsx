@@ -14,6 +14,22 @@ const PAD_HEIGHT = 160; // css px
 const EXPORT_MAX_WIDTH = 480; // device px — plenty for a signature mark
 const TRIM_PADDING = 8; // css px kept around the ink's bounding box
 
+/** Size the DPR-scaled bitmap to the current layout (this clears any ink)
+    and return the geometry it was sized for. */
+function sizeCanvas(canvas: HTMLCanvasElement): { cssWidth: number; dpr: number } {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(canvas.clientWidth * dpr);
+  canvas.height = Math.round(PAD_HEIGHT * dpr);
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = getComputedStyle(canvas).color; // inherits text color (ink)
+  }
+  return { cssWidth: canvas.clientWidth, dpr };
+}
+
 /**
  * Hand-drawn signature capture. Pointer events unify mouse/touch/stylus (with
  * pressure-sensitive stroke width where the device reports it); the ink is
@@ -38,6 +54,11 @@ export function SignaturePad({
   const last = useRef<{ x: number; y: number } | null>(null);
   // Ink bounding box in css px, grown as strokes land (for the trimmed export).
   const bounds = useRef<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null);
+  // The css width and dpr the bitmap was sized for. Once ink freezes the
+  // bitmap, clientWidth keeps tracking rotations/resizes — every coordinate
+  // (strokes in, crops out) must map through THIS geometry, never the live
+  // clientWidth, or exports crop the wrong region and strokes land offset.
+  const sized = useRef<{ cssWidth: number; dpr: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -47,16 +68,7 @@ export function SignaturePad({
     // rotation/resize. Once ink lands, the size freezes until clear().
     const size = () => {
       if (bounds.current) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(PAD_HEIGHT * dpr);
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.scale(dpr, dpr);
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = getComputedStyle(canvas).color; // inherits text color (ink)
-      }
+      sized.current = sizeCanvas(canvas);
     };
     size();
     const observer = new ResizeObserver(size);
@@ -66,7 +78,12 @@ export function SignaturePad({
 
   function point(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    // Map from the on-screen rect into the bitmap's frozen css space — after
+    // a mid-signature rotation the w-full canvas stretches, and unmapped
+    // coordinates would land ink beside the finger. Height never stretches
+    // (PAD_HEIGHT is fixed), so only x needs the scale.
+    const scaleX = sized.current ? sized.current.cssWidth / rect.width : 1;
+    return { x: (e.clientX - rect.left) * scaleX, y: e.clientY - rect.top };
   }
 
   function grow(p: { x: number; y: number }) {
@@ -125,9 +142,10 @@ export function SignaturePad({
 
   function clear() {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     bounds.current = null;
+    // Re-sizing clears the ink AND refreshes the frozen geometry to the
+    // current layout (ResizeObserver won't fire without a layout change).
+    if (canvas) sized.current = sizeCanvas(canvas);
     setHasInk(false);
     onInkChange?.(false);
   }
@@ -138,7 +156,10 @@ export function SignaturePad({
       const canvas = canvasRef.current;
       const b = bounds.current;
       if (!canvas || !b) return null;
-      const dpr = canvas.width / canvas.clientWidth;
+      // The dpr the bitmap was actually sized with — deriving it from the
+      // live clientWidth breaks after any rotation/resize since ink froze
+      // the bitmap (bounds are recorded in that frozen css space too).
+      const dpr = sized.current?.dpr ?? canvas.width / canvas.clientWidth;
       // Trim to the ink (plus padding), clamped to the canvas.
       const sx = Math.max(0, (b.minX - TRIM_PADDING) * dpr);
       const sy = Math.max(0, (b.minY - TRIM_PADDING) * dpr);
