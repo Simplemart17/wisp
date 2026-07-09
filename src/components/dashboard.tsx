@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import type { MyShareDto, MySharesResponseDto } from "@/lib/shared/api";
-import { Notice } from "./bits";
+import { Notice, useAtLeastSm } from "./bits";
 
 type ShareSummary = MyShareDto;
 
@@ -21,7 +21,48 @@ async function fetchPage(before?: string): Promise<MySharesResponseDto> {
   return (await res.json()) as MySharesResponseDto;
 }
 
-const DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+// Time included, not just the date: cards render only on touch screens where
+// the title tooltip (the desktop path to the exact moment) can never open.
+const DATETIME = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/** "password · view-only · 3 views" — the policy, told in traits. */
+function shareTraits(share: ShareSummary): string {
+  return (
+    [
+      share.policy.password ? "password" : null,
+      share.policy.requireIdentity ? "identity" : null,
+      share.policy.viewOnly ? "view-only" : null,
+      share.policy.watermark ? "watermark" : null,
+      share.policy.maxViews !== null ? `${share.policy.maxViews} views` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "link only"
+  );
+}
+
+/** One derivation per share per render — both layouts consume these rows. */
+function toRow(share: ShareSummary) {
+  const created = new Date(share.createdAt);
+  return {
+    share,
+    traits: shareTraits(share),
+    createdLabel: DATETIME.format(created),
+    createdTitle: created.toLocaleString(),
+  };
+}
+
+function StatusBadge({ expired }: { expired: boolean }) {
+  return expired ? (
+    <span className="text-faded">expired</span>
+  ) : (
+    <span className="text-verdigris-deep">active</span>
+  );
+}
 
 /**
  * "My shares" (SPEC §5b). Because the signed-in owner is verified per request,
@@ -60,6 +101,9 @@ export function Dashboard() {
 
 function ShareList() {
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
+  // Card ledger below sm:, table above — only one tree mounted (safe: shares
+  // render only after the client fetch, never in server HTML).
+  const desktop = useAtLeastSm();
   // Pagination failures stay local — a 429 on page 2 must never blank the
   // ledger the user is already reading.
   const [pageError, setPageError] = useState<string | null>(null);
@@ -126,8 +170,42 @@ function ShareList() {
     );
   }
 
+  const rows = phase.shares.map(toRow);
+
   return (
     <div className="space-y-2">
+    {/* One layout mounts at a time: a stacked ledger on phones (sideways-
+        scrolling a table one-handed is miserable), the table from sm: up.
+        The list is unbounded ("Load older shares"), so never mount both. */}
+    {!desktop ? (
+    <ul className="space-y-2">
+      {rows.map(({ share, traits, createdLabel }) => (
+        <li
+          key={share.id}
+          className="rounded-sm border border-mist bg-card px-3.5 py-3 font-mono text-xs"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="min-w-0 truncate">{share.id}</span>
+            <span className="shrink-0">
+              <StatusBadge expired={share.expired} />
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-faded">
+            {/* Wraps rather than truncates — a policy trait the owner can't
+                see is a policy they can't trust. */}
+            <span className="min-w-0">{traits}</span>
+            <span className="shrink-0 tabular-nums">{createdLabel}</span>
+          </div>
+          <Link
+            href={`/manage/${share.id}`}
+            className="mt-2 inline-flex min-h-8 items-center text-ink underline decoration-mist underline-offset-2 hover:decoration-ink"
+          >
+            manage
+          </Link>
+        </li>
+      ))}
+    </ul>
+    ) : (
     <div className="overflow-x-auto rounded-sm border border-mist bg-card">
       <table className="w-full font-mono text-xs">
         <thead>
@@ -142,47 +220,33 @@ function ShareList() {
           </tr>
         </thead>
         <tbody>
-          {phase.shares.map((share) => {
-            const traits = [
-              share.policy.password ? "password" : null,
-              share.policy.requireIdentity ? "identity" : null,
-              share.policy.viewOnly ? "view-only" : null,
-              share.policy.watermark ? "watermark" : null,
-              share.policy.maxViews !== null ? `${share.policy.maxViews} views` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <tr key={share.id} className="border-b border-mist/60 last:border-0">
-                <td className="px-3 py-2.5">{share.id}</td>
-                <td
-                  className="px-3 py-2.5 whitespace-nowrap text-faded tabular-nums"
-                  title={new Date(share.createdAt).toLocaleString()}
+          {rows.map(({ share, traits, createdLabel, createdTitle }) => (
+            <tr key={share.id} className="border-b border-mist/60 last:border-0">
+              <td className="px-3 py-2.5">{share.id}</td>
+              <td
+                className="px-3 py-2.5 whitespace-nowrap text-faded tabular-nums"
+                title={createdTitle}
+              >
+                {createdLabel}
+              </td>
+              <td className="px-3 py-2.5">
+                <StatusBadge expired={share.expired} />
+              </td>
+              <td className="px-3 py-2.5 text-faded">{traits}</td>
+              <td className="px-3 py-2.5 text-right">
+                <Link
+                  href={`/manage/${share.id}`}
+                  className="-my-2 inline-block px-2 py-2 text-ink underline decoration-mist underline-offset-2 hover:decoration-ink"
                 >
-                  {DATE.format(new Date(share.createdAt))}
-                </td>
-                <td className="px-3 py-2.5">
-                  {share.expired ? (
-                    <span className="text-faded">expired</span>
-                  ) : (
-                    <span className="text-verdigris-deep">active</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-faded">{traits || "link only"}</td>
-                <td className="px-3 py-2.5 text-right">
-                  <Link
-                    href={`/manage/${share.id}`}
-                    className="-my-2 inline-block px-2 py-2 text-ink underline decoration-mist underline-offset-2 hover:decoration-ink"
-                  >
-                    manage
-                  </Link>
-                </td>
-              </tr>
-            );
-          })}
+                  manage
+                </Link>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
+    )}
     {phase.nextCursor ? (
       <button
         type="button"
