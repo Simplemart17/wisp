@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Notice } from "./bits";
+import { CONTROL, Notice } from "./bits";
 
 const REASONS = [
   { value: "illegal", label: "Illegal content" },
@@ -55,7 +55,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm"
+            className={`w-full px-2 py-2 ${CONTROL}`}
           >
             {REASONS.map((r) => (
               <option key={r.value} value={r.value}>
@@ -74,7 +74,7 @@ export function ReportForm({ shareId }: { shareId: string }) {
             onChange={(e) => setDetails(e.target.value)}
             rows={4}
             maxLength={2000}
-            className="w-full rounded-sm border border-mist bg-card p-3 text-sm"
+            className={`w-full p-3 ${CONTROL}`}
           />
         </label>
 

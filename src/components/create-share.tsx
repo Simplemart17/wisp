@@ -5,7 +5,16 @@ import { useRef, useState } from "react";
 import { utf8Encode } from "@/lib/crypto/encoding";
 import { type CreateStep, type ShareReceipt, createShareFlow } from "@/lib/client/shares";
 import { isCanvasRenderable } from "@/lib/client/render/canvas";
-import { CopyField, Notice, SectionLabel, TierChip, TierLegend, formatBytes } from "./bits";
+import {
+  CONTROL,
+  CONTROL_XS,
+  CopyField,
+  Notice,
+  SectionLabel,
+  TierChip,
+  TierLegend,
+  formatBytes,
+} from "./bits";
 
 const MAX_PLAINTEXT_BYTES = 100 * 1024 * 1024;
 
@@ -268,6 +277,7 @@ export function CreateShare() {
                   label={r.email}
                   value={r.url}
                   primary={receipt.recipientLinks.length === 1}
+                  share
                 />
               ))}
               <p className="text-xs leading-relaxed text-faded">
@@ -279,7 +289,7 @@ export function CreateShare() {
             </>
           ) : (
             <div>
-              <CopyField label="share link" value={receipt.shareUrl} primary />
+              <CopyField label="share link" value={receipt.shareUrl} primary share />
               <p className="mt-2 text-xs leading-relaxed text-faded">
                 Safe to send — but it carries the key after the{" "}
                 <span className="font-mono text-ink">#</span>, so use a channel you trust.
@@ -389,7 +399,7 @@ export function CreateShare() {
               onChange={(e) => setMessage(e.target.value)}
               rows={6}
               placeholder="Write the message to seal…"
-              className="w-full resize-y rounded-sm border border-mist bg-card p-3 font-mono text-sm leading-relaxed placeholder:text-hush"
+              className={`w-full resize-y p-3 font-mono leading-relaxed placeholder:text-hush ${CONTROL}`}
             />
           ) : (
             <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-sm border border-dashed border-mist bg-card px-4 py-10 text-sm text-faded transition-colors hover:border-verdigris hover:bg-verdigris/5 has-focus-visible:border-verdigris has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-verdigris">
@@ -431,7 +441,7 @@ export function CreateShare() {
               <select
                 value={policy.expiresIn}
                 onChange={(e) => setPolicyField("expiresIn", e.target.value)}
-                className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm"
+                className={`w-full px-2 py-2 ${CONTROL}`}
               >
                 {EXPIRY_CHOICES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -451,7 +461,7 @@ export function CreateShare() {
               <select
                 value={policy.maxViews}
                 onChange={(e) => setPolicyField("maxViews", e.target.value)}
-                className="w-full rounded-sm border border-mist bg-card px-2 py-2 text-sm"
+                className={`w-full px-2 py-2 ${CONTROL}`}
               >
                 {VIEW_CHOICES.map((c) => (
                   <option key={c.value} value={c.value}>
@@ -480,7 +490,7 @@ export function CreateShare() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
-              className="w-full rounded-sm border border-mist bg-card px-3 py-2 text-sm placeholder:text-hush"
+              className={`w-full px-3 py-2 placeholder:text-hush ${CONTROL}`}
             />
             <span className="mt-1 block text-xs text-faded">
               Adds a second key the link alone can&apos;t provide — it never reaches the server.
@@ -502,7 +512,7 @@ export function CreateShare() {
                   onChange={(e) => setRecipientsText(e.target.value)}
                   rows={2}
                   placeholder={"jane@example.com, sam@example.com"}
-                  className="w-full rounded-sm border border-mist bg-card p-2 font-mono text-xs placeholder:text-hush"
+                  className={`w-full p-2 font-mono placeholder:text-hush ${CONTROL_XS}`}
                 />
                 <label className="flex items-center gap-2 text-xs text-faded">
                   <input
@@ -579,7 +589,7 @@ export function CreateShare() {
                 onChange={(e) => setNotifyEmail(e.target.value)}
                 placeholder="you@example.com"
                 aria-label="Your email for open notifications"
-                className="w-full rounded-sm border border-mist bg-card px-2 py-1.5 text-xs placeholder:text-hush"
+                className={`w-full px-2 py-1.5 placeholder:text-hush ${CONTROL_XS}`}
               />
             </PolicyToggle>
           </div>

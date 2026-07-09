@@ -11,7 +11,7 @@ import {
   updateShare,
 } from "@/lib/client/shares";
 import type { ExpiryChoice } from "@/lib/shared/policy";
-import { Notice, SectionLabel, formatRelativeTime } from "./bits";
+import { CONTROL, Notice, SectionLabel, formatRelativeTime, useAtLeastSm } from "./bits";
 
 type Phase =
   | { name: "loading" }
@@ -34,6 +34,10 @@ const TABLE_HEADER = "px-3 py-2 font-normal";
 
 export function ManageShare({ id }: { id: string }) {
   const [phase, setPhase] = useState<Phase>({ name: "loading" });
+  // Recipients render as a table from sm: up, stacked cards below — one tree
+  // mounted at a time (the report only exists after a client fetch, so the
+  // server-false snapshot never contradicts rendered HTML).
+  const desktop = useAtLeastSm();
   // Per-recipient revoke keeps its own two-click confirm and inline error so a
   // single row's failure never replaces the whole ledger.
   const [confirmingLink, setConfirmingLink] = useState<string | null>(null);
@@ -186,6 +190,49 @@ export function ManageShare({ id }: { id: string }) {
   const s = report.share;
   const status = s.expired ? "expired" : s.exhausted ? "exhausted" : "active";
 
+  // One action cluster for both the table and the phone cards, so the
+  // two-click confirm state stays in lockstep. Buttons carry generous py-2
+  // tap targets; the table cell cancels that with its own -my-2 wrapper
+  // (negative margins here would overflow the cards' flex rows).
+  const recipientActions = (r: AuditReport["recipients"][number]) =>
+    r.revoked ? null : confirmingLink === r.linkId ? (
+      <>
+        <button
+          type="button"
+          onClick={() => void revokeRecipient(r.linkId)}
+          className="inline-block px-2 py-2 font-medium text-white bg-wax rounded-xs hover:bg-wax-deep"
+        >
+          confirm
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmingLink(null)}
+          className="inline-block px-2 py-2 text-faded hover:text-ink"
+        >
+          keep
+        </button>
+      </>
+    ) : (
+      <>
+        {r.viewsRemaining !== null ? (
+          <button
+            type="button"
+            onClick={() => void addRecipientViews(r.linkId)}
+            className="inline-block px-2 py-2 text-verdigris-deep hover:underline"
+          >
+            +5 views
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setConfirmingLink(r.linkId)}
+          className="inline-block px-2 py-2 text-wax-deep hover:underline"
+        >
+          revoke link…
+        </button>
+      </>
+    );
+
   return (
     <section className="space-y-7">
       <div>
@@ -240,6 +287,51 @@ export function ManageShare({ id }: { id: string }) {
           <SectionLabel as="h2" className="mb-2 block">
             Recipients
           </SectionLabel>
+          {/* One layout mounts at a time: stacked cards on phones, the table
+              from sm: up. */}
+          {!desktop ? (
+          <ul className="space-y-2">
+            {report.recipients.map((r) => (
+              <li
+                key={r.linkId}
+                className="rounded-sm border border-mist bg-card px-3.5 py-3 font-mono text-xs"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  {/* break-all, not truncate: the hint is what disambiguates
+                      recipients, and revoke is irreversible — it must be
+                      readable in full before acting. */}
+                  <span className="min-w-0 break-all">{r.emailHint ?? r.linkId}</span>
+                  <span className="shrink-0 tabular-nums">
+                    {r.revoked ? (
+                      <span className="text-wax-deep">revoked</span>
+                    ) : r.viewsRemaining === null ? (
+                      "unlimited"
+                    ) : (
+                      `${r.viewsRemaining} views left`
+                    )}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-faded">
+                  <span>
+                    {r.verifiedAt ? `verified ${DATETIME.format(new Date(r.verifiedAt))}` : "not verified yet"}
+                  </span>
+                  {s.requiresSignature ? (
+                    r.signedAt ? (
+                      <span className="text-verdigris-deep">
+                        ✓ signed {DATETIME.format(new Date(r.signedAt))}
+                      </span>
+                    ) : (
+                      <span>signature pending</span>
+                    )
+                  ) : null}
+                </div>
+                {!r.revoked ? (
+                  <div className="mt-3 flex gap-4">{recipientActions(r)}</div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          ) : (
           <div className="overflow-x-auto rounded-sm border border-mist bg-card">
             <table className="w-full font-mono text-xs">
               <thead>
@@ -282,51 +374,16 @@ export function ManageShare({ id }: { id: string }) {
                       </td>
                     ) : null}
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {!r.revoked ? (
-                        confirmingLink === r.linkId ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => void revokeRecipient(r.linkId)}
-                              className="-my-2 inline-block px-2 py-2 font-medium text-white bg-wax rounded-xs hover:bg-wax-deep"
-                            >
-                              confirm
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingLink(null)}
-                              className="-my-2 inline-block px-2 py-2 text-faded hover:text-ink"
-                            >
-                              keep
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {r.viewsRemaining !== null ? (
-                              <button
-                                type="button"
-                                onClick={() => void addRecipientViews(r.linkId)}
-                                className="-my-2 inline-block px-2 py-2 text-verdigris-deep hover:underline"
-                              >
-                                +5 views
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => setConfirmingLink(r.linkId)}
-                              className="-my-2 inline-block px-2 py-2 text-wax-deep hover:underline"
-                            >
-                              revoke link…
-                            </button>
-                          </>
-                        )
-                      ) : null}
+                      {/* Cancels the buttons' py-2 so rows stay compact while
+                          tap targets stay full-height. */}
+                      <span className="-my-2 inline-flex">{recipientActions(r)}</span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          )}
           {recipientError ? (
             <div className="mt-2">
               <Notice tone="error">{recipientError}</Notice>
@@ -469,7 +526,7 @@ function AdjustPanel({
     }
   }
 
-  const CONTROL = "rounded-sm border border-mist bg-card px-3 py-2 text-sm";
+  const FIELD = `px-3 py-2 ${CONTROL}`;
   const APPLY =
     "rounded-sm border border-mist px-3 py-2 text-sm transition-colors hover:border-ink disabled:opacity-50";
 
@@ -485,7 +542,7 @@ function AdjustPanel({
             <select
               value={expiry}
               onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}
-              className={CONTROL}
+              className={FIELD}
             >
               {EXPIRY_LABELS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -516,7 +573,7 @@ function AdjustPanel({
                 onChange={(e) =>
                   setViews(Math.min(100, Math.max(1, Number.parseInt(e.target.value, 10) || 1)))
                 }
-                className={`w-20 text-center tabular-nums ${CONTROL}`}
+                className={`w-20 text-center tabular-nums ${FIELD}`}
               />
               <button
                 type="button"

@@ -103,3 +103,45 @@ test("burn-after-read lifecycle: wrong-password retry, burn, top-up revival", as
   await page.goto(shareUrl);
   await expect(page.getByRole("heading", { name: "Nothing here." })).toBeVisible();
 });
+
+test("identity share: recipient ledger with per-recipient top-up and revoke", async ({
+  page,
+}) => {
+  // Recipient rows appear on the manage page as soon as the share exists —
+  // verification happens at open time — so this covers the recipient ledger
+  // (stacked cards on the mobile project, the table on desktop) without an
+  // OTP round-trip. Emails stay unchecked so no real mail is attempted.
+  await page.goto("/");
+  await page.getByPlaceholder("Write the message to seal…").fill("recipient ledger e2e");
+  await page.getByLabel(/View limit/).selectOption("3");
+  await page.getByRole("checkbox", { name: /Require identity/ }).check();
+  await page
+    .getByPlaceholder(/jane@example\.com/)
+    .fill("jane@example.com, sam@example.com");
+  await page.getByRole("checkbox", { name: /Email each recipient/ }).uncheck();
+  await page.getByRole("button", { name: /Seal & create link/ }).click();
+  const manageUrl = (await page
+    .locator("code", { hasText: "/manage/" })
+    .first()
+    .textContent()) as string;
+
+  await page.goto(manageUrl);
+  await expect(page.getByRole("heading", { name: "Your share" })).toBeVisible();
+
+  // One row per recipient, in whichever layout this project renders
+  // (card <li> below sm:, table <tr> above — only one is mounted).
+  const row = (hint: string) => page.locator("li, tr").filter({ hasText: hint }).first();
+  await expect(row("j***@example.com")).toBeVisible();
+  await expect(row("s***@example.com")).toBeVisible();
+
+  // Per-recipient top-up: 3 views + 5 = 8, reflected after the refetch.
+  await row("j***@example.com").getByRole("button", { name: "+5 views" }).click();
+  await expect(row("j***@example.com")).toContainText("8");
+
+  // Per-recipient revoke keeps its two-click confirm and lands in the row.
+  await row("s***@example.com").getByRole("button", { name: "revoke link…" }).click();
+  await row("s***@example.com").getByRole("button", { name: "confirm" }).click();
+  await expect(row("s***@example.com")).toContainText("revoked");
+  // The other recipient is untouched.
+  await expect(row("j***@example.com")).not.toContainText("revoked");
+});
