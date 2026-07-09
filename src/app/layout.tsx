@@ -1,11 +1,12 @@
 import { ClerkProvider } from "@clerk/nextjs";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import { headers } from "next/headers";
 import Link from "next/link";
 
 import { AuthCorner } from "@/components/auth-corner";
 import { env } from "@/lib/server/env";
+import { APP_DESCRIPTION, APP_NAME, APP_SHORT_NAME, PAPER } from "@/lib/shared/brand";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -21,9 +22,21 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Wisp — sealed, expiring shares",
-  description:
-    "Share sensitive documents and messages, end-to-end encrypted in your browser. The server only ever stores ciphertext.",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  applicationName: APP_SHORT_NAME,
+  appleWebApp: { capable: true, statusBarStyle: "default", title: APP_SHORT_NAME },
+  // No global formatDetection opt-out: decrypted plaintext in the viewer is
+  // the one place tap-to-call genuinely helps. The digit-heavy pages (receipt,
+  // manage, dashboard) opt out individually.
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // cover + .safe-frame padding: content clears the notch and home indicator.
+  viewportFit: "cover",
+  themeColor: PAPER,
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -42,7 +55,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     >
       <body className="min-h-dvh antialiased">
         {/* Wide frame for header/footer; content stays a narrow column inside. */}
-        <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 sm:px-8">
+        <div className="safe-frame mx-auto flex min-h-dvh w-full max-w-5xl flex-col">
           <header className="flex items-center justify-between py-6">
             <Link href="/" className="group flex items-center gap-2.5" aria-label="Wisp home">
               <span className="grid h-7 w-7 place-items-center rounded-md bg-ink text-[13px] font-semibold text-paper transition-colors group-hover:bg-verdigris">

@@ -3,7 +3,7 @@
 :root {
   color-scheme: light;
   /* Cipher — cool porcelain ground, ink, one emerald signal. */
-  --paper: #f0f1ee; /* tinted ground */
+  --paper: #f0f1ee; /* tinted ground — mirrored as PAPER in src/lib/shared/brand.ts */
   --pane: #e7e9e4; /* subtle fill / wells */
   --card: #ffffff; /* crisp cards on the ground */
   --ink: #14181a; /* cool near-black */
@@ -49,6 +49,8 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Focus/active styles carry the touch feedback; the gray flash fights them. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Display face. Lives in the components layer so per-use utilities
@@ -58,6 +60,22 @@ body {
     font-family: var(--font-space-grotesk), "Space Grotesk", var(--font-sans);
     font-weight: 600;
     letter-spacing: -0.02em;
+  }
+
+  /* Page-frame gutters that also clear notches and rounded corners: the
+     viewport is viewport-fit=cover, so the base padding must never drop
+     below the device's safe-area insets. Gutters and breakpoint derive from
+     the theme (--spacing(5)/(8) = the px-5/px-8 this replaced; @variant sm)
+     so a re-themed scale or breakpoint moves this rule with every utility. */
+  .safe-frame {
+    padding-left: max(--spacing(5), env(safe-area-inset-left));
+    padding-right: max(--spacing(5), env(safe-area-inset-right));
+    padding-bottom: env(safe-area-inset-bottom);
+
+    @variant sm {
+      padding-left: max(--spacing(8), env(safe-area-inset-left));
+      padding-right: max(--spacing(8), env(safe-area-inset-right));
+    }
   }
 }
 
