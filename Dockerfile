@@ -19,7 +19,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # only reaches the server. Leave unset to build with sender accounts disabled.
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-RUN pnpm build
+# Optional error monitoring. The DSN is public and, like the Clerk key, baked
+# into the bundle; unset builds ship no monitoring at all. Org/project plus
+# the auth token (a BuildKit secret, so it never lands in an image layer)
+# additionally upload source maps for readable stack traces.
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN SENTRY_ORG=$SENTRY_ORG SENTRY_PROJECT=$SENTRY_PROJECT
+RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN pnpm build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

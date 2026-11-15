@@ -1,4 +1,7 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
+
+import { SENTRY_DSN, SENTRY_TUNNEL_ROUTE } from "./src/lib/shared/sentry";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -29,4 +32,18 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Error monitoring is opt-in (self-hosts run without it): the build is only
+// touched when a DSN is configured. Source maps are uploaded when the build
+// also has SENTRY_AUTH_TOKEN (+ SENTRY_ORG / SENTRY_PROJECT); without the
+// token none are generated, so they can never end up publicly served.
+export default SENTRY_DSN
+  ? withSentryConfig(nextConfig, {
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+      // Browser events go to our own origin and are relayed by
+      // src/app/sentry-tunnel/route.ts, keeping the CSP's connect-src tight.
+      tunnelRoute: SENTRY_TUNNEL_ROUTE,
+      silent: !process.env.CI,
+      telemetry: false,
+    })
+  : nextConfig;

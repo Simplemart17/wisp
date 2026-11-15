@@ -15,6 +15,12 @@ services:
       args:
         # Public by design; baked into the browser bundle (see Dockerfile).
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        # Optional error monitoring (see .env.deploy.example).
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+      secrets:
+        - sentry_auth_token
     restart: unless-stopped
     env_file: .env.deploy
     healthcheck:
@@ -39,3 +45,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+
+secrets:
+  # Build-time only (source map upload); never part of an image layer.
+  sentry_auth_token:
+    environment: SENTRY_AUTH_TOKEN
