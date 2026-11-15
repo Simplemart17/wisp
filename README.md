@@ -155,6 +155,8 @@ is no plaintext to re-derive anything from), so:
 | `WISP_SWEEP_SECRET` | no | Enables `POST /api/sweep` for an external cron (prod sweeps internally every 5 min anyway) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | no | Enables optional sender accounts + "My shares" dashboard |
 | `CLERK_SECRET_KEY` | no | Server side of the Clerk integration |
+| `NEXT_PUBLIC_SENTRY_DSN` | no | Enables Sentry error monitoring (build-time, like the Clerk key). Events are scrubbed of URL fragments, bodies, cookies and IPs, and browsers report through the app's own origin |
+| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | no | Build-time only: upload source maps so Sentry stack traces are readable |
 
 ## Honest limits (read SPEC §2)
 

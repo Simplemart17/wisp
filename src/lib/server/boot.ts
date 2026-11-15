@@ -28,6 +28,7 @@ export function assertBootEnv(): void {
   log.info("boot.env_ok", {
     clerk: env.clerkEnabled,
     email: Boolean(env.resendApiKey),
+    sentry: Boolean(env.sentryDsn),
     sweepEndpoint: Boolean(env.sweepSecret),
   });
 }

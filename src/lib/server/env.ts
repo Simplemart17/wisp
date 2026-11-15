@@ -43,6 +43,10 @@ export const env = {
   get clerkEnabled(): boolean {
     return Boolean(this.clerkPublishableKey && this.clerkSecretKey);
   },
+  /** Error monitoring is active only when a DSN was baked in at build time. */
+  get sentryDsn(): string | undefined {
+    return process.env.NEXT_PUBLIC_SENTRY_DSN || undefined;
+  },
   get isDev(): boolean {
     return process.env.NODE_ENV === "development";
   },
